@@ -274,6 +274,16 @@ MatchWorkspace
   版本号加构建期兜底（`vite define __APP_VERSION__`），Tauri 取不到时不再空白。
 - 预览页新增 `?view=about` 与 `?view=history`，两页都能截图自检。
 
+**第五轮：清理原作者信息 / 对局 HUD / 客户端 AI**
+
+- 关于页删掉作者、Bilibili、QQ 群，只留 版本 / 反馈(Issue) / 源代码；标题栏去掉「-By 小淳」。
+- 对局 HUD 整条删除（标题栏入口、介绍弹窗、演示舞台、图标，共 4 个组件 + 1 个测试）。
+- 历史列表只保留 5E，旧版本残留的完美对局不再进入列表。
+- **客户端 AI 引擎整体删除（-5400 行）**：`core/ai` 23 个文件、`useAiAnalysis`(633)、
+  `useAiSettingsForm`、`AiSettingsSection`、`native.ts` 的 8 个 AI 封装、调试面板的 AI 注入子标签。
+  保留 `core/ai/types.ts`（历史文档存储契约）与新增的 `core/ai/normalize.ts`（只做 v3 结构校验）。
+  历史回放改用 `StoredAiReport.vue` 只读渲染存档结果，不再调模型。
+
 
 ### 0.3 数据从哪来（签名网关）
 
