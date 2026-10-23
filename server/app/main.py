@@ -7,6 +7,7 @@ Demo parsing and AI orchestration plug into ``RoomHub.report_match`` later.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gzip
 import hashlib
 import logging
@@ -30,6 +31,7 @@ from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
 from .models import DevParseRequest, MatchReport, PostMatchReport, RoomCreate, RoomJoin
+from .persistence import SessionRepository
 from .security import JoinLimiter, TokenService, lan_addresses
 from .store import Store
 from .ws import Connection, ConnectionManager
@@ -61,11 +63,26 @@ def create_app(
     artifacts: ArtifactStore | None = None,
     room_mode: str | None = None,
     ai_client: object | None | str = "auto",
+    persist_dir: str | Path | None = None,
+    gc_interval: float | None = None,
+    history_days: int | None = None,
+    session_memory_max: int | None = None,
 ) -> FastAPI:
-    store = store or Store(**({"room_ttl": room_ttl} if room_ttl else {}))
+    store_kwargs: dict[str, object] = {}
+    if room_ttl:
+        store_kwargs["room_ttl"] = room_ttl
+    if session_memory_max:
+        store_kwargs["session_max"] = session_memory_max
+    store = store or Store(**store_kwargs)  # type: ignore[arg-type]
     tokens = TokenService(secret)
     ws_manager = ConnectionManager()
-    artifact_store = artifacts or ArtifactStore()
+    # Durable history is opt-in: `app.main:app` enables it from settings, while
+    # tests and embedders get a pure in-memory relay unless they ask for a dir.
+    repository = SessionRepository(persist_dir) if persist_dir else None
+    if artifacts is None and repository is not None:
+        artifact_store = ArtifactStore(directory=repository.artifacts_dir)
+    else:
+        artifact_store = artifacts or ArtifactStore()
     if demo_runner == "auto":
         demo_runner = (
             SubprocessDemoRunner()
@@ -83,18 +100,40 @@ def create_app(
         demo_runner=demo_runner,
         room_mode=room_mode,
         ai_client=ai_client,
+        repository=repository,
+        history_days=history_days,
     )
     limiter = JoinLimiter()
+    if repository is not None:
+        hub.load_history()
+
+    async def _reaper_loop() -> None:
+        assert gc_interval
+        while True:
+            await asyncio.sleep(gc_interval)
+            try:
+                await asyncio.to_thread(hub.reap)
+            except Exception:  # a failed sweep must never stop the next one
+                log.exception("housekeeping pass failed")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         ws_manager.bind_loop(asyncio.get_running_loop())
         if tokens.ephemeral:
             log.warning("CS_HELPER_SERVER_SECRET is unset; tokens die with this process")
-        log.info("relay ready")
+        reaper = asyncio.create_task(_reaper_loop()) if gc_interval else None
+        log.info(
+            "relay ready (persistence=%s, gc=%ss)",
+            repository.root if repository else "off",
+            gc_interval or "off",
+        )
         try:
             yield
         finally:
+            if reaper is not None:
+                reaper.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await reaper
             hub.shutdown()
             await ws_manager.shutdown()
 
@@ -202,6 +241,16 @@ def create_app(
     def room_snapshot(code: str, authorization: str | None = Header(default=None)):
         room, _member = require_room(authorization, code)
         return ok(hub.room_state(room))
+
+    @app.get("/api/v1/history/sessions")
+    def history_sessions(
+        limit: int = Query(default=20, ge=1, le=200),
+        authorization: str | None = Header(default=None),
+    ):
+        """Past matches, newest first. Survives restarts; feeds the habits view."""
+
+        require_room(authorization)
+        return ok({"sessions": hub.history(limit)})
 
     # -- artifacts ------------------------------------------------------
     def _artifact_response(
@@ -383,7 +432,9 @@ def create_app(
     # -- misc -----------------------------------------------------------
     @app.get("/healthz")
     def healthz():
-        return {"status": "ok", "rooms": len(store._rooms), "protocolVersion": events.PROTOCOL_VERSION}
+        # `rooms` / `protocolVersion` stay for existing probes; the rest is the
+        # P5 ops surface (residency, disk, last sweep).
+        return {"status": "ok", "protocolVersion": events.PROTOCOL_VERSION, **hub.metrics()}
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -419,4 +470,11 @@ def create_app(
     return app
 
 
-app = create_app(secret=os.getenv("CS_HELPER_SERVER_SECRET", ""))
+app = create_app(
+    secret=os.getenv("CS_HELPER_SERVER_SECRET", ""),
+    room_ttl=settings.ROOM_TTL,
+    persist_dir=settings.DATA_DIR,
+    gc_interval=settings.GC_INTERVAL or None,
+    history_days=settings.HISTORY_DAYS,
+    session_memory_max=settings.SESSION_MEMORY_MAX,
+)

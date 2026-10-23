@@ -22,6 +22,8 @@ ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 ROOM_CODE_LENGTH = 6
 ROOM_TTL_SECONDS = 4 * 60 * 60
 EVENT_BUFFER = 200
+SESSION_MEMORY_MAX = 50
+SESSION_SCHEMA_VERSION = 1
 
 
 def _new_room_code() -> str:
@@ -80,6 +82,9 @@ class Session:
     report: dict[str, Any]
     created_at: float
     updated_at: float
+    # Which room reported it. Persisted so a restarted single-room server can
+    # re-attach the last match instead of showing an empty room.
+    room_code: str | None = None
     profile_state: str = "pending"  # pending | running | ready | failed
     profiles: list[dict[str, Any]] | None = None
     demo_state: str = "pending"  # pending | running | ready | skipped | failed
@@ -107,14 +112,98 @@ class Session:
             "aiState": self.ai_state,
             "aiText": self.ai_text,
             "postReport": self.post_report,
+            "createdAt": int(self.created_at * 1000),
+            "updatedAt": int(self.updated_at * 1000),
+        }
+
+    # -- persistence ---------------------------------------------------
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "schemaVersion": SESSION_SCHEMA_VERSION,
+            "id": self.id,
+            "platform": self.platform,
+            "matchId": self.match_id,
+            "mapName": self.map_name,
+            "roomCode": self.room_code,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "report": self.report,
+            "profileState": self.profile_state,
+            "profiles": self.profiles,
+            "demoState": self.demo_state,
+            "artifactId": self.artifact_id,
+            "aiState": self.ai_state,
+            "aiText": self.ai_text,
+            "postReport": self.post_report,
+        }
+
+    @classmethod
+    def from_record(cls, data: dict[str, Any]) -> "Session | None":
+        """Rebuild a session, or ``None`` if the record cannot be trusted."""
+
+        try:
+            session = cls(
+                id=str(data["id"]),
+                platform=str(data["platform"]),
+                match_id=str(data["matchId"]),
+                map_name=str(data.get("mapName") or ""),
+                report=data.get("report") or {},
+                created_at=float(data.get("createdAt") or 0.0),
+                updated_at=float(data.get("updatedAt") or 0.0),
+                room_code=(str(data["roomCode"]) if data.get("roomCode") else None),
+                profile_state=str(data.get("profileState") or "pending"),
+                profiles=data.get("profiles"),
+                demo_state=str(data.get("demoState") or "pending"),
+                artifact_id=(str(data["artifactId"]) if data.get("artifactId") else None),
+                ai_state=str(data.get("aiState") or "pending"),
+                ai_text=data.get("aiText"),
+                post_report=data.get("postReport"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not isinstance(session.report, dict) or not session.report.get("teams"):
+            return None
+        # A job that was mid-flight when the process died will never finish.
+        for attribute in ("profile_state", "demo_state", "ai_state"):
+            if getattr(session, attribute) == "running":
+                setattr(session, attribute, "failed")
+        return session
+
+    def summary(self) -> dict[str, Any]:
+        """Compact row for the history list (no teams, no AI body)."""
+
+        post = self.post_report or {}
+        players = post.get("players") or []
+        return {
+            "sessionId": self.id,
+            "platform": self.platform,
+            "matchId": self.match_id,
+            "mapName": self.map_name,
+            "roomCode": self.room_code,
+            "createdAt": int(self.created_at * 1000),
+            "updatedAt": int(self.updated_at * 1000),
+            "profileState": self.profile_state,
+            "demoState": self.demo_state,
+            "aiState": self.ai_state,
+            "hasArtifact": bool(self.artifact_id),
+            "scoreA": post.get("scoreA"),
+            "scoreB": post.get("scoreB"),
+            "playerCount": len(players),
+            "aiExcerpt": (self.ai_text or "")[:120] or None,
         }
 
 
 class Store:
-    def __init__(self, room_ttl: int = ROOM_TTL_SECONDS) -> None:
+    def __init__(
+        self,
+        room_ttl: int = ROOM_TTL_SECONDS,
+        session_max: int = SESSION_MEMORY_MAX,
+    ) -> None:
         self.room_ttl = room_ttl
+        self.session_max = max(1, session_max)
         self._rooms: dict[str, Room] = {}
         self._sessions: dict[str, Session] = {}
+        self._session_ids: dict[str, str] = {}
         self._lock = RLock()
 
     @property
@@ -190,6 +279,10 @@ class Store:
                     expires_at=now + self.room_ttl,
                 )
                 self._rooms[normalised] = room
+                # Restarted server: re-attach the most recent match that was
+                # reported into this room, so the phone does not come back to
+                # an empty room after every restart.
+                self._rebind_latest_locked(room)
             room.expires_at = time.time() + self.room_ttl
 
             for member in room.members.values():
@@ -214,7 +307,9 @@ class Store:
             return True
 
     # -- sessions ------------------------------------------------------
-    def upsert_session(self, report: dict[str, Any]) -> tuple[Session, bool]:
+    def upsert_session(
+        self, report: dict[str, Any], room_code: str | None = None
+    ) -> tuple[Session, bool]:
         platform = report["platform"]
         match_id = report["matchId"]
         key = f"{platform}:{match_id}"
@@ -230,20 +325,42 @@ class Store:
                     report=report,
                     created_at=now,
                     updated_at=now,
+                    room_code=room_code,
                 )
                 self._sessions[key] = session
+                self._session_ids[session.id] = key
                 return session, True
             session.report = report
             session.map_name = report["mapName"]
             session.updated_at = now
+            if room_code:
+                session.room_code = room_code
             return session, False
+
+    def restore_session(self, session: Session) -> bool:
+        """Rehydrate one session from disk. Existing in-memory state wins."""
+
+        with self._lock:
+            if session.key in self._sessions:
+                return False
+            self._sessions[session.key] = session
+            self._session_ids[session.id] = session.key
+            return True
 
     def get_session(self, session_id: str) -> Session | None:
         with self._lock:
-            for session in self._sessions.values():
-                if session.id == session_id:
-                    return session
-            return None
+            key = self._session_ids.get(session_id)
+            return self._sessions.get(key) if key else None
+
+    def sessions(self) -> list[Session]:
+        """Newest first, for the history endpoint when nothing is on disk."""
+
+        with self._lock:
+            return sorted(self._sessions.values(), key=lambda item: item.updated_at, reverse=True)
+
+    def touch_session(self, session: Session) -> None:
+        with self._lock:
+            session.updated_at = time.time()
 
     def bind(self, room: Room, session: Session) -> None:
         with self._lock:
@@ -252,6 +369,19 @@ class Store:
     def rooms_bound_to(self, session_id: str) -> list[Room]:
         with self._lock:
             return [room for room in self._rooms.values() if room.session_id == session_id]
+
+    def _rebind_latest_locked(self, room: Room) -> Session | None:
+        now = time.time()
+        candidates = [
+            item
+            for item in self._sessions.values()
+            if item.room_code == room.code and now - item.updated_at <= self.room_ttl
+        ]
+        if not candidates:
+            return None
+        latest = max(candidates, key=lambda item: item.updated_at)
+        room.session_id = latest.id
+        return latest
 
     # -- event bookkeeping --------------------------------------------
     def next_envelope(self, room: Room, action: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -276,16 +406,65 @@ class Store:
             return seq >= room.buffer[0]["seq"] - 1
 
     # -- housekeeping --------------------------------------------------
-    def purge_expired(self) -> list[str]:
+    def purge_expired(self) -> tuple[list[str], list[str]]:
+        """Drop expired rooms, then sessions no room can still reach.
+
+        Returns ``(room_codes, session_ids)``. The caller persists/keeps the
+        dropped sessions on disk; this only decides what stays resident.
+        """
+
         with self._lock:
             return self._purge_locked()
 
-    def _purge_locked(self) -> list[str]:
+    def _purge_locked(self) -> tuple[list[str], list[str]]:
         now = time.time()
         dead = [code for code, room in self._rooms.items() if room.expired(now)]
         for code in dead:
             self._rooms.pop(code, None)
-        return dead
+        return dead, self._drop_idle_sessions_locked(now)
+
+    def _drop_idle_sessions_locked(self, now: float) -> list[str]:
+        bound = {room.session_id for room in self._rooms.values() if room.session_id}
+        dropped: list[str] = []
+
+        for key, session in list(self._sessions.items()):
+            if session.id in bound:
+                continue
+            if now - session.updated_at < self.room_ttl:
+                continue
+            self._forget_session_locked(key)
+            dropped.append(session.id)
+
+        # Hard cap: even a long-lived room accumulates one session per match.
+        overflow = len(self._sessions) - self.session_max
+        if overflow > 0:
+            idle = sorted(
+                (item for item in self._sessions.values() if item.id not in bound),
+                key=lambda item: item.updated_at,
+            )
+            for session in idle[:overflow]:
+                self._forget_session_locked(session.key)
+                dropped.append(session.id)
+        return dropped
+
+    def _forget_session_locked(self, key: str) -> None:
+        session = self._sessions.pop(key, None)
+        if session is not None:
+            self._session_ids.pop(session.id, None)
+
+    def stats(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                "rooms": len(self._rooms),
+                "sessions": len(self._sessions),
+                "members": sum(len(room.members) for room in self._rooms.values()),
+                "onlineMembers": sum(
+                    1
+                    for room in self._rooms.values()
+                    for member in room.members.values()
+                    if member.is_online
+                ),
+            }
 
     @staticmethod
     def _normalise(code: str) -> str:

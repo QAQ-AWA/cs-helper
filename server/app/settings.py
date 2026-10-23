@@ -8,6 +8,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENGINE_DIR = Path(os.getenv("CS_HELPER_ENGINE_DIR") or (REPO_ROOT / "engine"))
 WORK_DIR = Path(os.getenv("CS_HELPER_WORK_DIR") or (REPO_ROOT / ".cache" / "jobs"))
+# Durable state: one JSON per match plus content-addressed replay blobs. Keeping
+# it under .cache/ means a fresh clone stays clean and `rm -rf .cache` is a
+# complete reset.
+DATA_DIR = Path(os.getenv("CS_HELPER_DATA_DIR") or (REPO_ROOT / ".cache" / "data"))
 DEMO_DIR = Path(os.getenv("CS_HELPER_DEMO_DIR") or (ENGINE_DIR / "demos_opponents"))
 MAPS_DIR = Path(os.getenv("CS_HELPER_MAPS_DIR") or (ENGINE_DIR / "data" / "maps"))
 # Dev only: directory that `/api/v1/dev/parse-local` may read .dem files from.
@@ -53,6 +57,16 @@ AI_THINKING = (os.getenv("CS_HELPER_AI_THINKING", "0") or "0").strip() not in {"
 
 # 开发模式：开放 /api/v1/dev/*（合成轨迹），生产环境保持关闭。
 DEV_MODE = (os.getenv("CS_HELPER_DEV") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+# -- 运维（P5）------------------------------------------------------------
+# 房间多久没被访问就回收。客户端每次进房/拉快照都会续期，所以 4 小时足够。
+ROOM_TTL = _int_env("CS_HELPER_ROOM_TTL", 4 * 60 * 60, 60, 7 * 24 * 3600)
+# 后台回收节奏。0 关闭（测试默认走显式 reap()）。
+GC_INTERVAL = _int_env("CS_HELPER_GC_INTERVAL", 60, 0, 3600)
+# 历史留在磁盘上的天数；到期连轨迹产物一起删。
+HISTORY_DAYS = _int_env("CS_HELPER_HISTORY_DAYS", 7, 1, 365)
+# 内存里最多保留多少局会话。历史仍然在磁盘上，只是不再常驻。
+SESSION_MEMORY_MAX = _int_env("CS_HELPER_SESSION_MEMORY_MAX", 50, 1, 10000)
 
 
 def job_dir(session_id: str) -> Path:

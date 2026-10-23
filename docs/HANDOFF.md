@@ -22,11 +22,12 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
   └─ src/core/sync/sync-client.ts ──── lastSeq 续传 / snapshot 补齐 / 赛后战报上报
 服务端 server/（FastAPI）
   ├─ hub.py ──── 房间编排，唯一分配 seq 的地方（同锁内分配+发布）
-  ├─ store.py ── 房间/会话/环形缓冲（内存，重启即清空）
+  ├─ store.py ── 房间/会话/环形缓冲（内存，重启后从磁盘恢复最近 N 局）
+  ├─ persistence.py ── 一局一个 JSON，原子写；历史列表与保留期清理
   ├─ ws.py ────── 每连接有界队列；重连先补事件、快照最后发
   ├─ jobs.py ──── 画像(秒级) → AI(流式) → Demo 任务；按 platform:matchId 全局去重
   ├─ engine_runner.py ── 子进程管理（见"为什么跑子进程"）
-  ├─ artifacts.py ────── 内容寻址存储：索引(~1KB) + 按玩家 parts(~150KB)
+  ├─ artifacts.py ────── 内容寻址存储：索引(~1KB) + 按玩家 parts(~150KB)，写穿到磁盘
   └─ devtools.py ─────── DEV=1 时的合成轨迹与本地 .dem 直通解析
 引擎 engine/（纯 Python，CS-Scout 2.0 抽离）
   ├─ job_runner.py ── 5E 链路子进程入口（检索→下载→解析）
@@ -56,6 +57,8 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
 | `1641556` | 桌面端设置里过期的 localhost:3000 文案 → 8787 |
 | `ac2437c` | AI 适配 DeepSeek 推理模型 + 本地 .dem 直通解析接口 |
 | `d300c35` | **默认每人只下 1 个 Demo**（原 6 会下 4-5GB 跑不完）；轨迹 K/D 标注"该场" |
+| `6929899` | 交接文档 |
+| *本轮* | **P5 运维**：会话与轨迹落盘、启动恢复、MAIN 自动重绑、后台回收、历史接口 |
 
 ## 关键决策及依据（都有实测，别凭感觉推翻）
 
@@ -64,6 +67,9 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
 3. **AI 默认关思考**：`deepseek-flash` 是推理模型，先吐 `reasoning_content` 再吐 `content`。开思考首字 10.5s、关思考 0.8s，正文质量无差异。`max_tokens` 必须 ≥3000（思考也占预算，700 会空正文且 HTTP 200）。
 4. **地图资源不入库**：Valve 素材。`import_radar.py --from-vpk` 从本机 CS2 的 pak01_dir.vpk 读变换（`engine/vpk.py` 最小只读实现），雷达图 png 来自旧项目素材。de_mirage 变换 -3230/1713/5.0 已核对。
 5. **服务端不重复抓赛后战报**：桌面端 `post-match.ts` 已成熟，取回后上报，服务端只归档广播。
+6. **持久化用「一局一个 JSON」而不是数据库**：局域网规模下几百个小文件启动扫描是瞬时的，`rm -rf .cache/data` 就是彻底重置；`persistence.SessionRepository` 是唯一需要替换的面。写盘用 `tmp + os.replace`（中途掉电不会留下半截 JSON），坏文件跳过而不是让进程起不来。
+7. **重启后自动重绑最近一局**（限 4 小时内，即 `ROOM_TTL`）：否则持久化只有存档意义，手机回到房间仍是空的。`mobile.js:115` 本来就会用快照里的 `artifactId` 恢复轨迹，所以手机端零改动。
+8. **轨迹产物必须一起落盘**：只存会话会导致 `demoState=ready` 但拉轨迹 404；启动时若 blob 已不在，会话降级为 `demoState=failed` 并清空 `artifactId`。
 
 ## 实测性能基线
 
@@ -94,8 +100,15 @@ CS_HELPER_DEV=1                    # 开 /api/v1/dev/*（seed-paths / parse-loca
 CS_HELPER_LOCAL_DEMO_DIR=...       # dev 解析允许读取 .dem 的目录
 CS_HELPER_DEMO_MAX_DEMOS=1         # 每人 demo 数，调大线性增加下载时间
 
+# 运维（P5）
+CS_HELPER_DATA_DIR=...             # 历史根目录，默认 .cache/data
+CS_HELPER_ROOM_TTL=14400           # 房间无访问多久回收（秒）
+CS_HELPER_GC_INTERVAL=60           # 后台回收周期（秒），0 关闭
+CS_HELPER_HISTORY_DAYS=7           # 历史保留天数，到期连轨迹一起删
+CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
+
 # 测试
-cd server && pytest tests -q    # 62
+cd server && pytest tests -q    # 77
 cd engine && pytest tests -q    # 104 passed, 10 skipped（需 328MB 集成 demo）
 cd desktop && npx vitest run    # 284
 ```
@@ -110,10 +123,34 @@ cd desktop && npx vitest run    # 284
 - 全部玩家解析失败要回 `ROOM_ERROR 2006`，不能发 `TACTICAL_PATHS_READY{players:0}`（空白且无提示）。
 - 推理模型"只思考没正文"要报 2005 并说明推理字数，不能笼统说"未返回内容"。
 
+## P5 运维：房间回收 + 历史持久化（本轮）
+
+服务端原先全内存，重启即丢，且过期房间只 pop 房间不 pop 会话（会话永久累积）。现已改为「内存是缓存、磁盘是账本」。
+
+**落盘布局**（`CS_HELPER_DATA_DIR`，默认 `.cache/data`，已 gitignore）：
+
+```
+.cache/data/
+  sessions/5e_2603231500001-1949da3d.json      # 一局一个，~2.5KB，原子写
+  artifacts/018e9b33….json                     # 轨迹索引，~660B
+  artifacts/018e9b33….76561199352425025.json   # 按玩家分片，130–200KB
+```
+
+- `persistence.SessionRepository`：`tmp + os.replace` 原子写；坏文件/未知 schema 只跳过不致命；保留期按 mtime 清理。
+- 写盘时机：上报时一次 + 每个任务终态一次（`JobManager._run` 的 `finally` 统一挂钩），一局约 4 次。
+- `ArtifactStore` 加磁盘层：`put` 写穿、`get` 未命中懒加载、LRU 仍在（内存 96MB 上限），磁盘副本只由保留期回收。
+- `Store` 级联回收：过期房间 → 无房间绑定且空闲超 `ROOM_TTL` 的会话 → 超 `SESSION_MEMORY_MAX` 时按最旧淘汰；**被房间指向的会话永不淘汰**。淘汰只影响内存，历史仍在磁盘。
+- `hub.reap()` 由 lifespan 里的 asyncio 任务每 `GC_INTERVAL` 秒执行（`asyncio.to_thread`，不阻塞事件循环）；只有删过历史才去扫孤儿轨迹，避免每分钟全目录扫描。
+- 重启体验：`ensure_room` 新建房间时自动重绑 4 小时内最近一局（`Session.room_code` 落盘支撑），手机靠快照里的 `artifactId` 直接恢复轨迹，手机端零改动。
+- 新接口：`GET /api/v1/history/sessions?limit=20`（需房间 token），返回 matchId/地图/时间/三态/比分/是否有轨迹/AI 摘要，为下一步习惯聚合铺路。
+- `healthz` 扩为运维面：`rooms/sessions/members/onlineMembers/artifacts/artifactBytes/artifactDiskBytes/persistence/historyFiles/dataDir/historyDays/lastReap`，原有 `status/rooms/protocolVersion` 保留。
+
+**实测（真实 5E 四人一局）**：4 人 mirage 轨迹 20/13/13/16 回合，产物 635KB；session JSON 2.5KB。`kill` 后重启 → `restored 1 match(es)` → 重进 MAIN 快照直接有 match + artifactId，索引与单人分片均 200；`lastReap` 每 15s 前进一次（GC_INTERVAL=15 时）。
+
 ## 未做 / 待验证
 
-- **P5 运维**：历史归档、指标、按房间配额、Redis 化、房间回收（数据目前全内存，重启即丢）。
-- **历史习惯聚合**：现在是单场轨迹回放；"习惯"应聚合对手多场 demo（数据已能拉，缺聚合视图与文案）。
+- **历史习惯聚合**：现在是单场轨迹回放；"习惯"应聚合对手多场 demo（数据已能拉，缺聚合视图与文案）。历史接口已经就绪。
+- **按房间配额 / Redis 化**：单机单房间够用，未做；"重启即丢"这条硬阻塞已由持久化解决。
 - 真机视觉：手机渲染逻辑有无头断言保证不崩，但配色/缩放/手感未做真机走查。
 - 桌面端 AI 面板未订阅服务端 `phase:"thinking"`（ thinking 事件被安全忽略）。
 - `desktop/.github` 已删，CI 统一在仓库根；旧 `cs-helper-exe` 仓库未同步桌面端新改动（report-builder/sync-client）。
@@ -121,7 +158,6 @@ cd desktop && npx vitest run    # 284
 
 ## 建议下一步
 
-1. P5 运维（真正多人使用前必须做房间回收 + 持久化，否则服务端重启即丢）。
-2. 习惯聚合视图：多人多场 demo 的点位热力/开局路线对比。
-3. 发布桌面端：latest-build 已可用，打 `v1.0.0` 发正式版并更新根 README 下载链接。
-4. 真机走查手机端轨迹页（唯一没有视觉验证的页面）。
+1. 习惯聚合视图：多人多场 demo 的点位热力/开局路线对比（`/api/v1/history/sessions` 已是数据入口）。
+2. 发布桌面端：latest-build 已可用，打 `v1.0.0` 发正式版并更新根 README 下载链接。
+3. 真机走查手机端轨迹页（唯一没有视觉验证的页面）。

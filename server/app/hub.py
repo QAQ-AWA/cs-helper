@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any
 
 from . import settings
@@ -11,9 +13,12 @@ from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner
 from .events import Action
 from .jobs import JobManager
+from .persistence import SessionRepository
 from .security import TokenService
 from .store import Member, Room, Session, Store
 from .ws import ConnectionManager
+
+log = logging.getLogger("cs-helper.hub")
 
 
 class RoomNotFound(LookupError):
@@ -31,12 +36,23 @@ class RoomHub:
         room_mode: str | None = None,
         single_room_code: str | None = None,
         ai_client: object | None = None,
+        repository: SessionRepository | None = None,
+        history_days: int | None = None,
     ) -> None:
         self.store = store
         self.tokens = tokens
         self.ws = ws
         self.artifacts = artifacts or ArtifactStore()
-        self.jobs = JobManager(self.emit_session, self.artifacts, demo_runner, ai_client)  # type: ignore[arg-type]
+        self.repository = repository
+        self.history_days = history_days if history_days is not None else settings.HISTORY_DAYS
+        self.last_reap: dict[str, Any] | None = None
+        self.jobs = JobManager(  # type: ignore[arg-type]
+            self.emit_session,
+            self.artifacts,
+            demo_runner,
+            ai_client,
+            on_change=self.persist,
+        )
         self.room_mode = room_mode or settings.ROOM_MODE
         self.single_room_code = single_room_code or settings.SINGLE_ROOM_CODE
 
@@ -127,9 +143,10 @@ class RoomHub:
 
     # -- match ---------------------------------------------------------
     def report_match(self, room: Room, report: dict[str, Any]) -> tuple[Session, bool]:
-        session, created = self.store.upsert_session(report)
+        session, created = self.store.upsert_session(report, room_code=room.code)
         self.store.bind(room, session)
         self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
+        self.persist(session)
         self.jobs.submit_profile(session)
         self.jobs.submit_demo(session)
         return session, created
@@ -141,12 +158,101 @@ class RoomHub:
         if session is None:
             raise RoomNotFound(room.code)
         session.post_report = report
+        self.persist(session)
         self.emit_session(
             session,
             Action.POST_MATCH_READY,
             {"sessionId": session.id, **report},
         )
         return session
+
+    # -- durability ----------------------------------------------------
+    def persist(self, session: Session) -> None:
+        """Write-through one session. Never raises: a full disk must not kill a job."""
+
+        if self.repository is None:
+            return
+        with self.store.lock:
+            session.updated_at = time.time()
+            record = session.to_record()
+        try:
+            self.repository.save(record)
+        except OSError:
+            log.exception("could not persist session %s", session.id)
+
+    def load_history(self) -> int:
+        """Rehydrate the most recent matches after a restart."""
+
+        if self.repository is None:
+            return 0
+        loaded = 0
+        for record in self.repository.load_all(limit=self.store.session_max):
+            session = Session.from_record(record)
+            if session is None:
+                continue
+            # The replay blob may have been swept by retention; claiming
+            # "ready" would make the phone request a 404.
+            if session.artifact_id and not self.artifacts.has(session.artifact_id):
+                session.artifact_id = None
+                if session.demo_state == "ready":
+                    session.demo_state = "failed"
+            if self.store.restore_session(session):
+                loaded += 1
+        if loaded:
+            log.info("restored %d match(es) from %s", loaded, self.repository.root)
+        return loaded
+
+    def history(self, limit: int = 20) -> list[dict[str, Any]]:
+        if self.repository is not None:
+            rows: list[dict[str, Any]] = []
+            for record in self.repository.load_all(limit=limit):
+                session = Session.from_record(record)
+                if session is not None:
+                    rows.append(session.summary())
+            return rows
+        return [session.summary() for session in self.store.sessions()[:limit]]
+
+    def reap(self) -> dict[str, int]:
+        """One housekeeping pass: expired rooms, idle sessions, old history."""
+
+        rooms, sessions = self.store.purge_expired()
+        result = {"rooms": len(rooms), "sessions": len(sessions), "history": 0, "artifacts": 0}
+        if self.repository is not None:
+            window = self.history_days * 86400
+            dropped = self.repository.prune(window)
+            result["history"] = len(dropped)
+            if dropped:
+                # Only a deleted match can orphan a blob, so the (relatively
+                # expensive) directory scan is gated on that.
+                result["artifacts"] = self.artifacts.prune_orphans(
+                    self.repository.referenced_artifacts(), window
+                )
+        self.last_reap = {**result, "at": int(time.time())}
+        if any(result.values()):
+            log.info(
+                "reaped rooms=%d sessions=%d history=%d artifacts=%d",
+                result["rooms"],
+                result["sessions"],
+                result["history"],
+                result["artifacts"],
+            )
+        return result
+
+    def metrics(self) -> dict[str, Any]:
+        stats: dict[str, Any] = dict(self.store.stats())
+        stats.update(
+            {
+                "artifacts": self.artifacts.item_count,
+                "artifactBytes": self.artifacts.total_bytes,
+                "artifactDiskBytes": self.artifacts.disk_bytes(),
+                "persistence": self.repository is not None,
+                "historyFiles": self.repository.count() if self.repository else 0,
+                "dataDir": str(self.repository.root) if self.repository else None,
+                "historyDays": self.history_days,
+                "lastReap": self.last_reap,
+            }
+        )
+        return stats
 
     def shutdown(self) -> None:
         self.jobs.shutdown()
@@ -169,6 +275,7 @@ class RoomHub:
         )
         session.artifact_id = artifact.id
         session.demo_state = "ready"
+        self.persist(session)
         self.emit_session(
             session,
             Action.TACTICAL_PATHS_READY,
@@ -218,6 +325,7 @@ class RoomHub:
         )
         session.artifact_id = artifact.id
         session.demo_state = "ready"
+        self.persist(session)
         self.emit_session(
             session,
             Action.TACTICAL_PATHS_READY,

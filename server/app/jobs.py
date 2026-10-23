@@ -56,11 +56,13 @@ class JobManager:
         demo_runner: DemoRunner | None = None,
         ai_client: AiClient | None = None,
         max_workers: int = 4,
+        on_change: Callable[[Session], None] | None = None,
     ) -> None:
         self._emit_session = emit_session
         self._artifacts = artifacts
         self._demo_runner = demo_runner
         self._ai_client = ai_client
+        self._on_change = on_change
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job")
         self._futures: set[Future] = set()
         self._lock = Lock()
@@ -152,6 +154,13 @@ class JobManager:
                 session.profile_state = "failed"
             elif kind == "demo":
                 session.demo_state = "failed"
+        finally:
+            # Every terminal transition lands on disk, whatever the outcome.
+            if self._on_change is not None:
+                try:
+                    self._on_change(session)
+                except Exception:
+                    log.exception("could not persist session %s", session.id)
 
     def _profile_work(self, session: Session) -> None:
         payload = adapters.build_profile_payload(session.id, session.report)
