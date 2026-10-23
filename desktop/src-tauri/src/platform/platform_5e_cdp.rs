@@ -758,10 +758,13 @@ async fn run_cdp_session(
     let enable_cmd = serde_json::json!({
         "id": msg_id,
         "method": "Network.enable",
+        // 缓冲上限必须装得下 matching/batch 的响应：它带 10 个人的 role_info
+        // （每人几十个评分字段），实测几百 KB，旧的 512KB 单资源上限会让 CDP
+        // 直接丢弃响应体，getResponseBody 永远取不到，对局就永远拼不出来。
         "params": {
-            "maxTotalBufferSize": 5242880,
-            "maxResourceBufferSize": 524288,
-            "maxPostDataSize": 65536
+            "maxTotalBufferSize": 52428800,
+            "maxResourceBufferSize": 20971520,
+            "maxPostDataSize": 262144
         }
     });
     msg_id += 1;
