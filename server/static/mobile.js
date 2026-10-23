@@ -474,7 +474,12 @@ async function boot() {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // `update()` on every load so a redeployed shell is picked up immediately
+    // instead of up to 24h later.
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => registration.update())
+      .catch(() => {});
   }
 }
 

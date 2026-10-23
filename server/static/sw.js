@@ -1,4 +1,4 @@
-const CACHE = 'cs-helper-shell-v1';
+const CACHE = 'cs-helper-shell-v2';
 const SHELL = [
   '/',
   '/static/mobile.css',
@@ -32,19 +32,20 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== location.origin) return;
   // Live data must never be served from cache.
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) return;
+  if (event.request.method !== 'GET') return;
 
+  // Network first: the shell is served from a LAN box that changes on every
+  // release, and a cache-first shell means the phone keeps running last week's
+  // JS until the second reload. Cache is only the offline fallback.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response.ok && event.request.method === 'GET') {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    }),
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || Response.error())),
   );
 });
