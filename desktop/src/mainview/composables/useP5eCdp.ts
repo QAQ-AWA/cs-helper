@@ -1,4 +1,5 @@
 import type { DebugLogEntry } from '@core/log/types';
+import { clientLog } from '@core/log/client-log';
 import type { MatchRecord } from '@core/match/models';
 import { P5eMatchAggregator } from '@platforms/5e/aggregator';
 import type { P5eCaptureProgress } from '@platforms/5e/match-session';
@@ -175,6 +176,8 @@ export function useP5eCdp(
   let mapBackfill: MapBackfillState | null = null;
 
   function appendDebugLogEntry(entry: DebugLogEntry) {
+    // 无论 debug 面板开没开，都往服务端推一份：5E 侦测问题只有在出问题的机器上才看得见。
+    clientLog((entry.parsed.level ?? 'INFO') as 'INFO' | 'WARN' | 'ERROR', entry.parsed.category ?? '', entry.parsed.decoded ?? '');
     if (!debugEnabled.value) return;
     logEntries.value = [...logEntries.value, entry];
   }
@@ -386,6 +389,11 @@ export function useP5eCdp(
   ) {
     const key = bundleEmitKey(bundle);
     const run = async () => {
+      clientLog(
+        'INFO',
+        '对局',
+        `检测到对局 ${key}（source=${meta?.source ?? 'session'}，incomplete=${Boolean(bundle.incomplete)}）`,
+      );
       if (bundle.incomplete && !meta?.source) {
         const missing = [
           !bundle.userInfo ? MISSING_API_LABEL.userInfo : null,

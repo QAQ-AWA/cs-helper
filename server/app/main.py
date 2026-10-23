@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import gzip
 import hashlib
+import json
 import logging
 import os
 import re
@@ -17,7 +18,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -418,6 +419,32 @@ def create_app(
     ):
         room, _member = require_room(authorization, roomCode)
         return ok({"removed": hub.identity.clear(room.code)})
+
+    @app.post("/api/v1/dev/client-log")
+    def dev_client_log(payload: dict | None = Body(default=None)):
+        """开发辅助：客户端把本地日志推上来，落盘成 JSONL。
+
+        没有 devtools 的机器上排查「5E 侦测为什么没触发」全靠它：客户端看到什么、
+        丢了什么，都在这里。
+        """
+
+        if not settings.DEV_MODE:
+            raise ApiError("开发模式未开启", code=1010, status=404)
+        lines = (payload or {}).get("lines")
+        if not isinstance(lines, list):
+            raise ApiError("lines 必须是数组", code=1003, status=422)
+
+        folder = settings.DATA_DIR / "client-log"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{time.strftime('%Y-%m-%d')}.jsonl"
+        written = 0
+        with target.open("a", encoding="utf-8") as handle:
+            for line in lines[:300]:
+                if not isinstance(line, dict):
+                    continue
+                handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+                written += 1
+        return ok({"written": written, "file": str(target)})
 
     @app.post("/api/v1/dev/seed-paths")
     def dev_seed_paths(

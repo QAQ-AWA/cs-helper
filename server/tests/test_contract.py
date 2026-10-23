@@ -106,3 +106,33 @@ def test_ws_token_survives_a_server_restart(client):
     room2, member = hub.authenticate(token)
     assert room2.code == room_code
     assert member.nickname == "甲"
+
+
+def test_dev_client_log_appends_jsonl(client, monkeypatch, tmp_path):
+    """客户端日志落盘，供没有 devtools 的机器排查侦测问题。"""
+    import json
+
+    from app import settings
+
+    monkeypatch.setattr(settings, "DEV_MODE", True)
+    monkeypatch.setattr(settings, "DATA_DIR", tmp_path)
+
+    res = client.post(
+        "/api/v1/dev/client-log",
+        json={"lines": [{"level": "INFO", "category": "采集", "text": "等待对局"}]},
+    )
+    assert res.json()["code"] == 0
+    assert res.json()["data"]["written"] == 1
+
+    files = list((tmp_path / "client-log").glob("*.jsonl"))
+    assert len(files) == 1
+    line = json.loads(files[0].read_text(encoding="utf-8").strip())
+    assert line["category"] == "采集"
+
+
+def test_dev_client_log_is_hidden_outside_dev_mode(client, monkeypatch):
+    from app import settings
+
+    monkeypatch.setattr(settings, "DEV_MODE", False)
+    res = client.post("/api/v1/dev/client-log", json={"lines": []})
+    assert res.status_code == 404

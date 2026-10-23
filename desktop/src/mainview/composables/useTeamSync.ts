@@ -3,6 +3,7 @@ import { teamSyncClient } from '@core/sync/sync-client';
 import type { SyncSettings, SyncStatus } from '@core/sync/types';
 import type { MatchRecord } from '@core/match/models';
 import type { P5ePostMatchReport } from '@platforms/5e/post-match';
+import { clientLog, setClientLogServer } from '@core/log/client-log';
 
 /** The slice of the relay's session that the desktop renders. */
 export interface ServerMatchView {
@@ -33,6 +34,8 @@ export interface ServerPlayerView {
 
 export function useTeamSync() {
   const settings = ref<SyncSettings>(teamSyncClient.getSettings());
+  // 客户端日志跟着服务端地址走，改地址后日志也发到新地址。
+  setClientLogServer(settings.value.serverUrl);
   const status = ref<SyncStatus>(teamSyncClient.getStatus());
   const roomMembers = ref<Array<{ id: string; nickname: string; deviceType: string; isOnline: boolean }>>([]);
   const aiReport = ref<unknown | null>(null);
@@ -157,8 +160,17 @@ export function useTeamSync() {
   }
 
   async function reportMatch(record: MatchRecord) {
-    if (settings.value.enabled && settings.value.autoReport) {
+    if (!settings.value.enabled || !settings.value.autoReport) {
+      clientLog('INFO', '上报', `跳过上报：enabled=${settings.value.enabled} autoReport=${settings.value.autoReport}`);
+      return;
+    }
+    clientLog('INFO', '上报', `上报对局 ${record.id}（${record.detail.mapName || '未知地图'}）`);
+    try {
       await teamSyncClient.reportMatch(record);
+      clientLog('INFO', '上报', `上报成功 ${record.id}`);
+    } catch (err) {
+      clientLog('ERROR', '上报', `上报失败 ${record.id}: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 
