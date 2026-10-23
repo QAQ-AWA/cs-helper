@@ -96,7 +96,7 @@ def test_demo_job_publishes_artifact_ref(demo_client):
         headers={"Authorization": f"Bearer {room['token']}"},
     )
     assert artifact.status_code == 200
-    bundle = artifact.json()
+    bundle = artifact.json()["data"]
     assert bundle["map"] == "de_mirage"
     # The index stays small: replay payloads live in per-player parts.
     assert bundle["players"][0]["steamId"] == "76561198000000002"
@@ -108,7 +108,7 @@ def test_demo_job_publishes_artifact_ref(demo_client):
         headers={"Authorization": f"Bearer {room['token']}"},
     )
     assert player.status_code == 200
-    assert player.json()["replay"]["round_count"] == 2
+    assert player.json()["data"]["replay"]["round_count"] == 2
 
     missing = client.get(
         f"/api/v1/artifacts/{data['match']['artifactId']}/players/76561198000000009",

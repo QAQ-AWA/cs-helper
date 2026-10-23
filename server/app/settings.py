@@ -40,6 +40,9 @@ AI_KEY = (os.getenv("CS_HELPER_AI_KEY") or "").strip()
 AI_TIMEOUT = _int_env("CS_HELPER_AI_TIMEOUT", 60, 5, 300)
 AI_MAX_TOKENS = _int_env("CS_HELPER_AI_MAX_TOKENS", 700, 100, 4000)
 
+# 开发模式：开放 /api/v1/dev/*（合成轨迹），生产环境保持关闭。
+DEV_MODE = (os.getenv("CS_HELPER_DEV") or "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 def job_dir(session_id: str) -> Path:
     """Per-job output directory. Isolation is why the engine runs in a child."""

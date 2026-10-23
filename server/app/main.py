@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import hashlib
 import logging
 import os
 import re
@@ -203,7 +204,15 @@ def create_app(
         return ok(hub.room_state(room))
 
     # -- artifacts ------------------------------------------------------
-    def _artifact_response(request: Request, if_none_match: str | None, body: bytes, etag: str, media_type: str):
+    def _artifact_response(
+        request: Request,
+        if_none_match: str | None,
+        body: bytes,
+        media_type: str,
+    ):
+        # 与其它接口保持同一套信封；直接拼接避免解析再序列化。
+        wrapped = b'{"code":0,"message":"ok","data":' + body + b"}"
+        etag = f'"{hashlib.sha256(wrapped).hexdigest()[:32]}"'
         if if_none_match and if_none_match.strip() == etag:
             return Response(status_code=304, headers={"ETag": etag})
         headers = {
@@ -212,9 +221,9 @@ def create_app(
             "Vary": "Accept-Encoding",
         }
         if "gzip" in (request.headers.get("accept-encoding") or "").lower():
-            body = gzip.compress(body, compresslevel=6)
+            wrapped = gzip.compress(wrapped, compresslevel=6)
             headers["Content-Encoding"] = "gzip"
-        return Response(content=body, media_type=media_type, headers=headers)
+        return Response(content=wrapped, media_type=media_type, headers=headers)
 
     @app.get("/api/v1/artifacts/{artifact_id}")
     def get_artifact(
@@ -227,7 +236,7 @@ def create_app(
         artifact = hub.artifacts.get(artifact_id)
         if artifact is None:
             raise ApiError("对象不存在或已过期", code=1007, status=404)
-        return _artifact_response(request, if_none_match, artifact.body, artifact.etag, artifact.media_type)
+        return _artifact_response(request, if_none_match, artifact.body, artifact.media_type)
 
     @app.get("/api/v1/artifacts/{artifact_id}/players/{steam_id}")
     def get_artifact_player(
@@ -241,7 +250,7 @@ def create_app(
         part = hub.artifacts.get_part(artifact_id, steam_id)
         if part is None:
             raise ApiError("该玩家的轨迹不存在或已过期", code=1007, status=404)
-        return _artifact_response(request, if_none_match, part.body, part.etag, "application/json")
+        return _artifact_response(request, if_none_match, part.body, "application/json")
 
     # -- match ----------------------------------------------------------
     @app.post("/api/v1/match/report")
@@ -278,6 +287,22 @@ def create_app(
         except RoomNotFound:
             raise ApiError("房间里还没有对局，无法归档战报", code=1009, status=409) from None
         return ok({"stored": True, "matchCode": payload.matchCode})
+
+    @app.post("/api/v1/dev/seed-paths")
+    def dev_seed_paths(
+        roomCode: str = Query(..., min_length=4, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        """开发辅助：给当前对局塞一条合成轨迹，手机/桌面可立刻验证回放。"""
+
+        room, _member = require_room(authorization, roomCode)
+        if not settings.DEV_MODE:
+            raise ApiError("开发模式未开启", code=1010, status=404)
+        try:
+            artifact = hub.seed_dev_paths(room)
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        return ok({"artifactId": artifact.id, "synthetic": True})
 
     # -- websocket ------------------------------------------------------
     @app.websocket("/ws")

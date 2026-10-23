@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from . import settings
+from .adapters import normalise_players
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner
 from .events import Action
@@ -148,3 +150,35 @@ class RoomHub:
 
     def shutdown(self) -> None:
         self.jobs.shutdown()
+
+    # -- dev only ------------------------------------------------------
+    def seed_dev_paths(self, room: Room):
+        """合成一条轨迹产物，用于没有 CS2/5E 时验证回放（需 CS_HELPER_DEV=1）。"""
+
+        from .devtools import build_synthetic_artifact
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+
+        players = session.profiles or normalise_players(session.report)
+        bundle, parts = build_synthetic_artifact(session, players)
+        artifact = self.artifacts.put(
+            json.dumps(bundle, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            parts=parts,
+        )
+        session.artifact_id = artifact.id
+        session.demo_state = "ready"
+        self.emit_session(
+            session,
+            Action.TACTICAL_PATHS_READY,
+            {
+                "sessionId": session.id,
+                "artifactId": artifact.id,
+                "map": session.map_name,
+                "players": bundle["players"],
+                "failed": [],
+                "synthetic": True,
+            },
+        )
+        return artifact

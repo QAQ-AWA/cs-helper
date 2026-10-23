@@ -85,7 +85,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 55 passed（含 node 无头渲染测试）
+cd server && python -m pytest tests -q     # 57 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -164,6 +164,18 @@ POST_MATCH_READY { sessionId, ...report }  → 房间内所有设备
 - 必须先有对局上报，否则返回 `409 / 1009`。
 - 重复上报是覆盖，不会产生两份战报。
 - 战报同时写入快照，手机重连后仍能看到。
+
+## 本地联调（无 CS2/5E 也能看界面）
+
+```bash
+# 一键起服务（Windows，默认 0.0.0.0:8787）
+tools\start-server.cmd
+
+# 模拟一台 PC：建房 → 上报 10 人对局 →（可选）合成轨迹 →（可选）赛后战报
+python tools/simulate_client.py --platform perfect --seed-paths --post-after 5
+```
+
+`--platform perfect` 会跳过 Demo 检索，适合纯 UI 演示；`--seed-paths` 需要服务端 `CS_HELPER_DEV=1`，会给当前对局塞一条合成轨迹（纯开发用途，生产必须关闭）。
 
 ## 为什么解析跑子进程
 
