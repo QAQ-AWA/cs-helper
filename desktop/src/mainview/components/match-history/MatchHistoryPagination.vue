@@ -73,22 +73,22 @@ function onPageInputKeydown(event: KeyboardEvent) {
     v-if="totalPages > 1"
     class="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
   >
-    <p class="text-[13px] leading-relaxed text-slate-500">
+    <p class="text-[13px] leading-relaxed text-fg-secondary">
       {{ l('显示', 'Showing') }}
-      <span class="font-semibold tabular-nums text-slate-700">{{ rangeLabel }}</span>
+      <span class="font-semibold tabular-nums text-fg">{{ rangeLabel }}</span>
       {{ l('条，共', 'of') }}
-      <span class="font-semibold tabular-nums text-slate-700">{{ totalCount }}</span>
+      <span class="font-semibold tabular-nums text-fg">{{ totalCount }}</span>
       {{ l('条', 'matches') }}
     </p>
 
     <div
-      class="inline-flex items-center gap-0.5 self-start rounded-xl bg-white p-1 ring-1 ring-slate-200/60 sm:self-auto"
+      class="inline-flex items-center gap-0.5 self-start rounded-xl bg-surface p-1 ring-1 ring-border/60 sm:self-auto"
       role="navigation"
       :aria-label="l('分页', 'Pagination')"
     >
       <button
         type="button"
-        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-[background-color,color,transform] duration-200 hover:bg-slate-50 hover:text-slate-700 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-fg-muted transition-[background-color,color,transform] duration-200 hover:bg-elevated hover:text-fg active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
         :disabled="currentPage <= 1"
         :aria-label="l('上一页', 'Previous page')"
         @click="goTo(currentPage - 1)"
@@ -102,21 +102,21 @@ function onPageInputKeydown(event: KeyboardEvent) {
           type="text"
           inputmode="numeric"
           pattern="[0-9]*"
-          class="h-6 cursor-text rounded bg-transparent px-0 text-center text-[12px] font-semibold tabular-nums text-slate-800 outline-none ring-1 ring-slate-200/70 transition-[background-color,box-shadow] duration-200 focus:bg-slate-50 focus:ring-2 focus:ring-accent/20"
+          class="h-6 cursor-text rounded bg-transparent px-0 text-center text-[12px] font-semibold tabular-nums text-fg outline-none ring-1 ring-border/70 transition-[background-color,box-shadow] duration-200 focus:bg-elevated focus:ring-2 focus:ring-accent/20"
           :class="pageInputWidthClass"
           :aria-label="l(`第 ${currentPage} 页，共 ${totalPages} 页`, `Page ${currentPage} of ${totalPages}`)"
           @keydown="onPageInputKeydown"
           @blur="commitPageInput"
         />
-        <span class="mx-2 text-[12px] leading-none text-slate-300" aria-hidden="true">/</span>
-        <span class="min-w-[1ch] text-[12px] font-medium leading-none tabular-nums text-slate-500">
+        <span class="mx-2 text-[12px] leading-none text-fg-muted" aria-hidden="true">/</span>
+        <span class="min-w-[1ch] text-[12px] font-medium leading-none tabular-nums text-fg-secondary">
           {{ totalPages }}
         </span>
       </div>
 
       <button
         type="button"
-        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-[background-color,color,transform] duration-200 hover:bg-slate-50 hover:text-slate-700 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+        class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-fg-muted transition-[background-color,color,transform] duration-200 hover:bg-elevated hover:text-fg active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
         :disabled="currentPage >= totalPages"
         :aria-label="l('下一页', 'Next page')"
         @click="goTo(currentPage + 1)"

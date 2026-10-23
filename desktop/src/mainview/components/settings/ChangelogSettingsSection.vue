@@ -93,7 +93,7 @@ function releaseDate(value: string): string {
       <div
         v-for="index in 4"
         :key="`changelog-skeleton-${index}`"
-        class="overflow-hidden rounded-2xl border border-border bg-surface p-4"
+        class="overflow-hidden rounded-xl border border-border bg-surface p-4"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1 space-y-2">
@@ -146,7 +146,7 @@ function releaseDate(value: string): string {
       v-for="entry in releases"
       v-else
       :key="entry.tagName"
-      class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-colors duration-200"
+      class="overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-colors duration-200"
     >
       <header class="flex items-start gap-3 px-4 py-4">
         <button

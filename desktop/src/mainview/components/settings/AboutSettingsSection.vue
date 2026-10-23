@@ -14,10 +14,13 @@ import { localize as l } from '../../i18n';
 
 const appName = computed(() => l('CS 匹配助手', 'CS Match Helper'));
 const { state, formattedVersion, isBusy, checkManual, openDialog } = useUpdateCheck();
+// Tauri 的 getVersion 在某些环境下拿不到，回退到构建期注入的版本，
+// 免得「版本」那一行只剩一个空白。
+const versionText = computed(() => formattedVersion.value || __APP_VERSION__);
 const author = '小淳 (Forked & Extended by QAQ-AWA)';
 const authorGithubUrl = 'https://github.com/qianjiachun/';
 const authorBilibiliUrl = 'https://space.bilibili.com/193482';
-const repoUrl = 'https://github.com/QAQ-AWA/cs-helper-exe';
+const repoUrl = 'https://github.com/QAQ-AWA/cs-helper';
 const repoIssuesUrl = `${repoUrl}/issues`;
 const qqGroupNumber = '1050732555';
 
@@ -54,7 +57,7 @@ async function copyQqGroup() {
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+  <section class="overflow-hidden rounded-xl border border-border bg-surface">
     <div
       class="flex flex-col items-center gap-3 border-b border-border-subtle bg-elevated/30 px-5 py-6 text-center"
     >
@@ -73,7 +76,7 @@ async function copyQqGroup() {
       <span class="shrink-0 text-[13px] text-fg-muted">{{ l('版本', 'Version') }}</span>
       <div class="min-w-0 text-right">
         <div class="flex items-center justify-end gap-2">
-          <span class="text-[13px] font-semibold tabular-nums text-fg">{{ formattedVersion }}</span>
+          <span class="text-[13px] font-semibold tabular-nums text-fg">{{ versionText }}</span>
           <UpdateBadge v-if="state.hasUpdate" @click="openDialog" />
         </div>
         <button
@@ -173,7 +176,7 @@ async function copyQqGroup() {
             <span ref="copyIconRef" class="inline-flex origin-center">
               <Copy
                 class="h-3.5 w-3.5 text-accent/50 transition-[opacity,color] duration-200 group-hover/copy:text-accent/80 group-hover/copy:opacity-100"
-                :class="copyIconHighlighted ? 'text-emerald-500 opacity-100' : 'text-accent/60'"
+                :class="copyIconHighlighted ? 'text-success opacity-100' : 'text-accent/60'"
                 aria-hidden="true"
               />
             </span>
@@ -195,7 +198,7 @@ async function copyQqGroup() {
         @contextmenu.prevent="copyRepo"
       >
         <span class="truncate text-[13px] font-medium text-accent group-hover:text-accent-hover">
-          github.com/qianjiachun/cs-match-helper
+          github.com/QAQ-AWA/cs-helper
         </span>
         <ExternalLink
           class="h-3.5 w-3.5 shrink-0 text-accent/70 transition-colors duration-200 group-hover:text-accent"

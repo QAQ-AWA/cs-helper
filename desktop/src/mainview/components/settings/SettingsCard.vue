@@ -10,7 +10,7 @@ defineProps<{
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+  <section class="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
     <header
       v-if="title"
       class="flex items-start gap-3 border-b border-border-subtle bg-elevated/50 px-5 py-4"

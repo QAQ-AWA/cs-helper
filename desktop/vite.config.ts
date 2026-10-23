@@ -5,8 +5,16 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+// 关于页要显示版本号；Tauri 的 getVersion 在浏览器预览里取不到，
+// 用构建期注入的 package.json 版本兜底。
+const pkg = JSON.parse(
+  await import('node:fs/promises').then((fs) => fs.readFile(path.resolve(rootDir, 'package.json'), 'utf8')),
+);
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   root: path.resolve(rootDir, 'src/mainview'),
   base: './',
   plugins: [vue(), tailwindcss()],

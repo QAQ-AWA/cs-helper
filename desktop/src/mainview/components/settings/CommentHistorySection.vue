@@ -179,7 +179,7 @@ async function copySteamId(steamid: string) {
           <article
             v-for="(item, index) in comments.historyList.value"
             :key="item.id"
-            class="group/history overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-shadow duration-200 hover:shadow-md"
+            class="group/history overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-shadow duration-200 hover:shadow-md"
             :style="{ '--item-delay': `${Math.min(index, 8) * 45}ms` }"
           >
             <header

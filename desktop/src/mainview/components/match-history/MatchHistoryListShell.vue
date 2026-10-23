@@ -34,12 +34,12 @@ defineExpose({ scrollToTop });
       <div class="mx-auto max-w-4xl px-6 py-8 sm:px-8 sm:py-10">
         <header class="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-baseline gap-2.5">
-            <h1 class="text-[1.75rem] font-bold tracking-tight text-slate-900">
+            <h1 class="text-[1.75rem] font-bold tracking-tight text-fg">
               {{ l('历史对局', 'Match history') }}
             </h1>
             <span
               v-if="loading || totalCount > 0"
-              class="inline-flex min-w-8 items-center justify-center rounded-full bg-slate-200/70 px-2.5 py-0.5 text-sm font-medium tabular-nums text-slate-600"
+              class="inline-flex min-w-8 items-center justify-center rounded-full bg-border/70 px-2.5 py-0.5 text-sm font-medium tabular-nums text-fg-secondary"
               :class="loading ? 'animate-pulse text-transparent' : ''"
               :aria-label="loading ? l('加载中', 'Loading') : l(`共 ${totalCount} 条`, `${totalCount} matches`)"
             >
@@ -48,7 +48,7 @@ defineExpose({ scrollToTop });
           </div>
 
           <div
-            class="flex rounded-lg bg-slate-200/50 p-0.5"
+            class="flex rounded-lg bg-border/50 p-0.5"
             role="tablist"
             :aria-label="l('平台筛选', 'Platform filter')"
           >
@@ -59,8 +59,8 @@ defineExpose({ scrollToTop });
               class="relative inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
               :class="
                 filter === opt.id
-                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-surface text-fg shadow-sm ring-1 ring-black/5'
+                  : 'text-fg-secondary hover:text-fg'
               "
               :aria-selected="filter === opt.id"
               @click="emit('update:filter', opt.id)"

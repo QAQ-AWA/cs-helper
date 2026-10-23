@@ -16,6 +16,8 @@ import { teamSyncClient } from '@core/sync/sync-client';
 import MatchWorkspace from '../components/MatchWorkspace.vue';
 import ServerRoomPanel from '../components/ServerRoomPanel.vue';
 import TeamSyncSettingsSection from '../components/settings/TeamSyncSettingsSection.vue';
+import AboutSettingsSection from '../components/settings/AboutSettingsSection.vue';
+import MatchHistoryListRow from '../components/match-history/MatchHistoryListRow.vue';
 
 type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty';
 
@@ -214,6 +216,17 @@ async function bootstrap() {
     // Fixture only: the real composable carries more methods than the panel reads.
     render: () => {
       if (view === 'sync') return h(TeamSyncSettingsSection);
+      if (view === 'about') return h('div', { class: 'max-w-2xl p-6' }, [h(AboutSettingsSection)]);
+      if (view === 'history') {
+        const items = [
+          { id: 'm1', platformId: '5e', savedAt: Date.now(), updatedAt: Date.now(), matchTime: '10-23 20:15', mapName: 'de_mirage', playerCount: 10, matchAvgScore: 2410, postMatchScore: '13 : 10', postMatchWinner: 'A', hasPostMatch: true, aiStatus: 'ready' },
+          { id: 'm2', platformId: '5e', savedAt: Date.now(), updatedAt: Date.now() - 86_400_000, matchTime: '10-22 21:03', mapName: 'de_dust2', playerCount: 10, matchAvgScore: 2380, aiStatus: 'ready' },
+          { id: 'm3', platformId: '5e', savedAt: Date.now(), updatedAt: Date.now() - 172_800_000, matchTime: '10-21 19:40', mapName: 'de_inferno', playerCount: 8, matchAvgScore: 2355, aiStatus: 'none' },
+        ];
+        return h('div', { class: 'max-w-3xl p-6' }, [
+          h('ul', { class: 'flex flex-col gap-3' }, items.map((item, index) => h(MatchHistoryListRow, { item: item as never, staggerIndex: index }))),
+        ]);
+      }
       if (view === 'workspace') {
         return h(MatchWorkspace, {
           match: MATCH_RECORD as never,

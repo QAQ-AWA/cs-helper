@@ -207,10 +207,10 @@ onMounted(() => {
           <div
             v-for="i in 4"
             :key="i"
-            class="h-[88px] animate-pulse rounded-2xl bg-white/80 ring-1 ring-slate-200/60"
+            class="h-[88px] animate-pulse rounded-2xl bg-surface/80 ring-1 ring-border/60"
           />
         </div>
-        <div v-else-if="history.error.value" class="py-20 text-center text-[13px] text-rose-600">
+        <div v-else-if="history.error.value" class="py-20 text-center text-[13px] text-danger">
           {{ history.error.value }}
         </div>
         <MatchHistoryEmptyState v-else-if="!filteredEntries.length" />
@@ -253,10 +253,10 @@ onMounted(() => {
         </div>
 
         <div class="min-h-0 flex-1 overflow-hidden">
-          <div v-if="detailLoading" class="flex h-full items-center justify-center text-[13px] text-slate-500">
+          <div v-if="detailLoading" class="flex h-full items-center justify-center text-[13px] text-fg-secondary">
             {{ l('加载详情…', 'Loading details…') }}
           </div>
-          <div v-else-if="detailError" class="flex h-full items-center justify-center text-[13px] text-rose-600">
+          <div v-else-if="detailError" class="flex h-full items-center justify-center text-[13px] text-danger">
             {{ detailError }}
           </div>
           <MatchWorkspace
@@ -276,15 +276,15 @@ onMounted(() => {
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
       @pointerdown.self="deleteConfirmItem = null"
     >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-black/5">
-        <h2 class="text-[15px] font-semibold text-slate-900">{{ l('删除这条对局记录？', 'Delete this match?') }}</h2>
-        <p class="mt-1.5 text-[12px] leading-relaxed text-slate-500">
+      <div class="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl ring-1 ring-black/5">
+        <h2 class="text-[15px] font-semibold text-fg">{{ l('删除这条对局记录？', 'Delete this match?') }}</h2>
+        <p class="mt-1.5 text-[12px] leading-relaxed text-fg-secondary">
           {{ l(`将删除“${historyPrimaryMapTitle(deleteConfirmItem)}”的本地快照，此操作不可恢复。`, `The local snapshot for “${historyPrimaryMapTitle(deleteConfirmItem)}” will be permanently deleted.`) }}
         </p>
         <div class="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            class="cursor-pointer rounded-lg px-3 py-1.5 text-[12px] font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            class="cursor-pointer rounded-lg px-3 py-1.5 text-[12px] font-medium text-fg-secondary transition-colors hover:bg-elevated"
             @click="deleteConfirmItem = null"
           >
             {{ l('取消', 'Cancel') }}
