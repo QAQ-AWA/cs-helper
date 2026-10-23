@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import appIcon from '@app-icon';
-import iconBilibili from '@/assets/icons/bilibili.svg';
 import iconGithub from '@/assets/icons/github.svg';
-import iconQq from '@/assets/icons/qq.svg';
-import { Check, Copy, ExternalLink, Loader2, RefreshCw } from 'lucide-vue-next';
-import { computed, useTemplateRef } from 'vue';
-import { useCopyFeedback } from '../../composables/useCopyFeedback';
-import { useCopySuccessAnimation } from '../../composables/useCopySuccessAnimation';
+import { ExternalLink, Loader2, RefreshCw } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { useUpdateCheck } from '../../composables/useUpdateCheck';
 import { openExternalUrl } from '../../native';
 import UpdateBadge from '../UpdateBadge.vue';
@@ -17,24 +13,13 @@ const { state, formattedVersion, isBusy, checkManual, openDialog } = useUpdateCh
 // Tauri 的 getVersion 在某些环境下拿不到，回退到构建期注入的版本，
 // 免得「版本」那一行只剩一个空白。
 const versionText = computed(() => formattedVersion.value || __APP_VERSION__);
-const author = '小淳 (Forked & Extended by QAQ-AWA)';
-const authorGithubUrl = 'https://github.com/qianjiachun/';
-const authorBilibiliUrl = 'https://space.bilibili.com/193482';
+
 const repoUrl = 'https://github.com/QAQ-AWA/cs-helper';
 const repoIssuesUrl = `${repoUrl}/issues`;
-const qqGroupNumber = '1050732555';
 
-const { copyText } = useCopyFeedback();
-const copyWrapRef = useTemplateRef<HTMLElement | null>('copyWrapRef');
-const copyIconRef = useTemplateRef<HTMLElement | null>('copyIconRef');
-const copyCheckTemplateRef = useTemplateRef<HTMLElement | null>('copyCheckTemplateRef');
-const { copyIconHighlighted, playCopySuccessAnimation } = useCopySuccessAnimation({
-  copyWrapRef,
-  copyIconRef,
-  copyCheckTemplateRef,
-});
-
-const updateActionLabel = computed(() => (state.checking ? l('检查中…', 'Checking…') : l('检查更新', 'Check for updates')));
+const updateActionLabel = computed(() =>
+  state.checking ? l('检查中…', 'Checking…') : l('检查更新', 'Check for updates'),
+);
 
 function openRepo() {
   void openExternalUrl(repoUrl);
@@ -43,17 +28,6 @@ function openRepo() {
 function openIssues() {
   void openExternalUrl(repoIssuesUrl);
 }
-
-async function copyRepo() {
-  await copyText(repoUrl, l('已复制开源地址', 'Repository URL copied'));
-}
-
-async function copyQqGroup() {
-  const ok = await copyText(qqGroupNumber, { showToast: false });
-  if (ok) {
-    playCopySuccessAnimation();
-  }
-}
 </script>
 
 <template>
@@ -61,14 +35,12 @@ async function copyQqGroup() {
     <div
       class="flex flex-col items-center gap-3 border-b border-border-subtle bg-elevated/30 px-5 py-6 text-center"
     >
-      <img
-        :src="appIcon"
-        :alt="appName"
-        class="h-16 w-16 rounded-2xl object-cover"
-      />
+      <img :src="appIcon" :alt="appName" class="h-16 w-16 rounded-2xl object-cover" />
       <div>
         <h3 class="text-[16px] font-semibold tracking-tight text-fg">{{ appName }}</h3>
-        <p class="mt-1 text-[12px] text-fg-muted">By {{ author }}</p>
+        <p class="mt-1 text-[12px] text-fg-muted">
+          {{ l('5E 对局情报 · 服务端分析', '5E match intel, analysed server-side') }}
+        </p>
       </div>
     </div>
 
@@ -103,99 +75,35 @@ async function copyQqGroup() {
     </div>
 
     <div class="flex items-center justify-between gap-4 border-b border-border-subtle px-5 py-4">
-      <span class="text-[13px] text-fg-muted">{{ l('作者', 'Author') }}</span>
-      <div class="flex items-center gap-2">
-        <div class="flex items-center gap-0.5">
-          <a
-            href="#"
-            class="group inline-flex cursor-pointer rounded-md p-1 transition-colors duration-200 hover:bg-elevated"
-            :aria-label="l('作者 GitHub', 'Author’s GitHub')"
-            @click.prevent="openExternalUrl(authorGithubUrl)"
-          >
-            <img
-              :src="iconGithub"
-              alt=""
-              class="h-4 w-4 opacity-50 transition-opacity duration-200 group-hover:opacity-100"
-              aria-hidden="true"
-            />
-          </a>
-          <a
-            href="#"
-            class="group inline-flex cursor-pointer rounded-md p-1 transition-colors duration-200 hover:bg-elevated"
-            :aria-label="l('作者 Bilibili', 'Author’s Bilibili')"
-            @click.prevent="openExternalUrl(authorBilibiliUrl)"
-          >
-            <img
-              :src="iconBilibili"
-              alt=""
-              class="h-4 w-4 opacity-90 transition-opacity duration-200 group-hover:opacity-100"
-              aria-hidden="true"
-            />
-          </a>
-        </div>
-        <span class="text-[13px] font-semibold text-fg">{{ author }}</span>
-      </div>
-    </div>
-
-    <div class="flex items-center justify-between gap-4 border-b border-border-subtle px-5 py-4">
       <span class="text-[13px] text-fg-muted">{{ l('反馈', 'Feedback') }}</span>
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="group inline-flex cursor-pointer items-center gap-1.5 rounded-md py-px transition-colors duration-200 hover:bg-elevated"
-          :aria-label="l('GitHub Issues 反馈', 'Report an issue on GitHub')"
-          :title="repoIssuesUrl"
-          @click="openIssues"
+      <button
+        type="button"
+        class="group inline-flex cursor-pointer items-center gap-1.5 rounded-md py-px transition-colors duration-200 hover:bg-elevated"
+        :aria-label="l('GitHub Issues 反馈', 'Report an issue on GitHub')"
+        :title="repoIssuesUrl"
+        @click="openIssues"
+      >
+        <img
+          :src="iconGithub"
+          alt=""
+          class="h-4 w-4 opacity-50 transition-opacity duration-200 group-hover:opacity-100"
+          aria-hidden="true"
+        />
+        <span
+          class="text-[13px] font-medium text-accent transition-colors duration-200 group-hover:text-accent-hover"
         >
-          <img
-            :src="iconGithub"
-            alt=""
-            class="h-4 w-4 opacity-50 transition-opacity duration-200 group-hover:opacity-100"
-            aria-hidden="true"
-          />
-          <span class="text-[13px] font-medium text-accent transition-colors duration-200 group-hover:text-accent-hover">
-            Issue
-          </span>
-        </button>
-        <button
-          type="button"
-          class="group/copy relative inline-flex cursor-pointer items-center gap-1.5 overflow-visible rounded-md py-px transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          :title="l('点击复制 QQ 群号', 'Copy QQ group number')"
-          @click="copyQqGroup"
-        >
-          <img
-            :src="iconQq"
-            alt=""
-            class="h-4 w-4"
-            aria-hidden="true"
-          />
-          <span class="text-[13px] font-medium text-accent transition-colors duration-200 group-hover/copy:text-accent-hover">
-            {{ l('QQ群', 'QQ group') }}
-          </span>
-          <span ref="copyWrapRef" class="relative inline-flex shrink-0 overflow-visible">
-            <span ref="copyIconRef" class="inline-flex origin-center">
-              <Copy
-                class="h-3.5 w-3.5 text-accent/50 transition-[opacity,color] duration-200 group-hover/copy:text-accent/80 group-hover/copy:opacity-100"
-                :class="copyIconHighlighted ? 'text-success opacity-100' : 'text-accent/60'"
-                aria-hidden="true"
-              />
-            </span>
-          </span>
-          <span ref="copyCheckTemplateRef" class="sr-only" aria-hidden="true">
-            <Check class="h-3 w-3" />
-          </span>
-        </button>
-      </div>
+          Issue
+        </span>
+      </button>
     </div>
 
     <div class="flex items-center justify-between gap-4 px-5 py-4">
-      <span class="shrink-0 text-[13px] text-fg-muted">{{ l('开源地址', 'Source code') }}</span>
+      <span class="shrink-0 text-[13px] text-fg-muted">{{ l('源代码', 'Source code') }}</span>
       <button
         type="button"
         class="group flex min-w-0 cursor-pointer items-center gap-1.5 text-right transition-colors duration-200"
         :title="repoUrl"
         @click="openRepo"
-        @contextmenu.prevent="copyRepo"
       >
         <span class="truncate text-[13px] font-medium text-accent group-hover:text-accent-hover">
           github.com/QAQ-AWA/cs-helper

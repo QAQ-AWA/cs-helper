@@ -10,7 +10,6 @@ import { useDebugUnlock } from '../composables/useDebugUnlock';
 import type { useComments } from '../composables/useComments';
 import type { MatchHistoryApi } from '../composables/useMatchHistory';
 import UpdateBadge from './UpdateBadge.vue';
-import MatchHudIcon from './MatchHudIcon.vue';
 
 const { t, locale } = useI18n();
 
@@ -46,7 +45,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   clearLogs: [];
   openSettings: [];
-  openMatchHud: [];
   openTeamSync: [];
   goHome: [];
   openUpdateDialog: [];
@@ -74,7 +72,7 @@ const showBackButton = computed(() => props.view === 'settings');
           aria-hidden="true"
         />
         <div class="flex min-w-0 items-baseline gap-2">
-          <p class="truncate text-[13px] font-semibold text-fg">{{ locale === 'en-US' ? 'CS Match Helper - By 小淳' : 'CS 匹配助手 -By 小淳' }}</p>
+          <p class="truncate text-[13px] font-semibold text-fg">{{ locale === 'en-US' ? 'CS Match Helper' : 'CS 匹配助手' }}</p>
           <span class="shrink-0 text-[11px] text-fg-muted">{{ version }}</span>
         </div>
       </div>
@@ -138,17 +136,6 @@ const showBackButton = computed(() => props.view === 'settings');
           />
           <span class="font-mono tracking-wider text-fg-muted">{{ relayRoom }}</span>
         </span>
-      </button>
-
-      <button
-        v-if="showSettingsButton"
-        type="button"
-        class="flex h-full cursor-pointer items-center gap-1.5 px-3 text-[12px] text-fg-muted transition-colors duration-200 hover:bg-elevated hover:text-fg-secondary"
-        :aria-label="locale === 'en-US' ? 'Match HUD' : '对局 HUD'"
-        @click="emit('openMatchHud')"
-      >
-        <MatchHudIcon size="sm" />
-        <span class="hidden sm:inline">{{ locale === 'en-US' ? 'Match HUD' : '对局 HUD' }}</span>
       </button>
 
       <button

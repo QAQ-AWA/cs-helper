@@ -63,6 +63,8 @@ export function useMatchHistory() {
     for (const raw of docs) {
       const { document, unsupportedSections } = migrateDocument(raw);
       if (!document.id || !document.platformId) continue;
+      // 只做 5E：旧版本留在本地磁盘上的完美对局不再进入列表。
+      if (document.platformId !== '5e') continue;
       items.push(documentToListItem(document, unsupportedSections));
     }
     listItems.value = sortHistoryItemsNewestFirst(items);

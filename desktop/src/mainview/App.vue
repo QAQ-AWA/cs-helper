@@ -26,9 +26,6 @@ const PlayerCommentsDrawer = defineAsyncComponent(
   () => import('./components/comments/PlayerCommentsDrawer.vue'),
 );
 const UpdateDialog = defineAsyncComponent(() => import('./components/UpdateDialog.vue'));
-const MatchHudIntroDialog = defineAsyncComponent(
-  () => import('./components/MatchHudIntroDialog.vue'),
-);
 const TeamSyncDialog = defineAsyncComponent(
   () => import('./components/TeamSyncDialog.vue'),
 );
@@ -121,13 +118,6 @@ const { closeConfirmOpen, cancelClose, confirmClose, onCloseDialogAfterLeave } =
 
 const commentsDrawerMounted = ref(false);
 const updateDialogMounted = ref(false);
-const matchHudDialogOpen = ref(false);
-const matchHudDialogMounted = ref(false);
-
-function openMatchHudDialog() {
-  matchHudDialogMounted.value = true;
-  matchHudDialogOpen.value = true;
-}
 
 watch(
   () => comments.drawerOpen.value,
@@ -238,7 +228,6 @@ function onBackFromP5e() {
       :relay-room="teamSync.settings.value.enabled ? teamSync.settings.value.roomCode : ''"
       @clear-logs="clearLogEntries"
       @open-settings="openSettings()"
-      @open-match-hud="openMatchHudDialog()"
       @open-team-sync="teamSyncDialogOpen = true"
       @go-home="goHome"
       @open-update-dialog="openDialog()"
@@ -317,11 +306,6 @@ function onBackFromP5e() {
       @cancel="cancelClose()"
       @confirm="confirmClose()"
       @after-leave="onCloseDialogAfterLeave()"
-    />
-    <MatchHudIntroDialog
-      v-if="matchHudDialogMounted"
-      :open="matchHudDialogOpen"
-      @close="matchHudDialogOpen = false"
     />
     <TeamSyncDialog
       :open="teamSyncDialogOpen"
