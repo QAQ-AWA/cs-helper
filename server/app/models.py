@@ -153,3 +153,9 @@ class PostMatchReport(BaseModel):
         if value and not value.startswith(("https://", "http://")):
             raise ValueError("demoUrl must be an absolute URL")
         return value
+
+
+class DevParseRequest(BaseModel):
+    """Dev-only: parse a local .dem by file name (no path traversal)."""
+
+    name: str = Field(min_length=5, max_length=200)

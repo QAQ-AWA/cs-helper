@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 import requests
 
@@ -29,6 +29,7 @@ class AiConfig:
     api_key: str
     timeout: int
     max_tokens: int
+    thinking: bool = False
 
     @property
     def endpoint(self) -> str:
@@ -45,6 +46,7 @@ def config_from_settings() -> AiConfig | None:
         api_key=key,
         timeout=settings.AI_TIMEOUT,
         max_tokens=settings.AI_MAX_TOKENS,
+        thinking=settings.AI_THINKING,
     )
 
 
@@ -84,8 +86,14 @@ def build_prompt(map_name: str, players: Iterable[dict[str, Any]]) -> str:
 总长度控制在 400 字以内。"""
 
 
-def iter_sse_deltas(lines: Iterable[str]) -> Iterator[str]:
-    """Yield content deltas from an OpenAI-compatible SSE stream."""
+def iter_sse_events(lines: Iterable[str]) -> Iterator[tuple[str, str]]:
+    """Yield ``(kind, text)`` from an OpenAI-compatible SSE stream.
+
+    ``kind`` is ``"reason"`` for a reasoning model's scratchpad and
+    ``"content"`` for the answer that users actually see. Callers must surface
+    the scratchpad as progress: on a reasoning model it arrives first and can
+    run for ten seconds before the first visible token.
+    """
 
     for raw in lines:
         if isinstance(raw, bytes):
@@ -104,36 +112,59 @@ def iter_sse_deltas(lines: Iterable[str]) -> Iterator[str]:
         if not choices:
             continue
         delta = choices[0].get("delta") or {}
+        reasoning = delta.get("reasoning_content")
+        if reasoning:
+            yield "reason", reasoning
         content = delta.get("content")
         if content:
-            yield content
+            yield "content", content
+
+
+def iter_sse_deltas(lines: Iterable[str]) -> Iterator[str]:
+    """Yield only the visible answer deltas."""
+
+    for kind, text in iter_sse_events(lines):
+        if kind == "content":
+            yield text
 
 
 class OpenAiClient:
     def __init__(self, config: AiConfig) -> None:
         self.config = config
 
-    def stream(self, prompt: str) -> Iterator[str]:
+    def stream(self, prompt: str, on_reason: Callable[[str], None] | None = None) -> Iterator[str]:
+        body: dict[str, Any] = {
+            "model": self.config.model,
+            "stream": True,
+            "max_tokens": self.config.max_tokens,
+            "temperature": 0.4,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        if not self.config.thinking:
+            # Supported by DeepSeek's reasoning endpoints; harmless elsewhere
+            # only because unknown fields would 400, so keep it opt-in.
+            body["thinking"] = {"type": "disabled"}
+
         response = requests.post(
             self.config.endpoint,
             headers={
                 "Authorization": f"Bearer {self.config.api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": self.config.model,
-                "stream": True,
-                "max_tokens": self.config.max_tokens,
-                "temperature": 0.4,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-            },
+            json=body,
             timeout=self.config.timeout,
             stream=True,
         )
         if response.status_code >= 400:
             detail = response.text[:200]
             raise RuntimeError(f"AI 服务返回 {response.status_code}: {detail}")
-        return iter_sse_deltas(response.iter_lines(decode_unicode=True))
+
+        for kind, text in iter_sse_events(response.iter_lines(decode_unicode=True)):
+            if kind == "reason":
+                if on_reason is not None:
+                    on_reason(text)
+            else:
+                yield text

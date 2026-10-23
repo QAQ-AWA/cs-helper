@@ -182,3 +182,52 @@ class RoomHub:
             },
         )
         return artifact
+
+    def parse_dev_demo(self, room: Room, demo_name: str):
+        """真实解析一份本机 .dem，跳过 5E 检索与下载（需 CS_HELPER_DEV=1）。"""
+
+        from .devtools import parse_local_demo, resolve_local_demo
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+
+        demo_path = resolve_local_demo(demo_name)
+        roster = session.profiles or normalise_players(session.report)
+        players = [
+            {"steamid": str(p.get("steamId") or ""), "username": p.get("nickname") or ""}
+            for p in roster
+            if p.get("steamId")
+        ]
+        if not players:
+            raise ValueError("当前对局没有可解析的选手")
+
+        session.demo_state = "running"
+        self.emit_session(
+            session, Action.JOB_PROGRESS, {"sessionId": session.id, "stage": "demo", "step": 1, "total": 6}
+        )
+        try:
+            bundle, parts = parse_local_demo(demo_path, players, settings.job_dir(session.id))
+        except Exception:
+            session.demo_state = "failed"
+            raise
+
+        artifact = self.artifacts.put(
+            json.dumps(bundle, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            parts=parts,
+        )
+        session.artifact_id = artifact.id
+        session.demo_state = "ready"
+        self.emit_session(
+            session,
+            Action.TACTICAL_PATHS_READY,
+            {
+                "sessionId": session.id,
+                "artifactId": artifact.id,
+                "map": session.map_name,
+                "players": bundle["players"],
+                "failed": bundle.get("failed") or [],
+                "synthetic": False,
+            },
+        )
+        return artifact, bundle

@@ -23,13 +23,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import events, settings
+from . import devtools, events, settings
 from .ai import OpenAiClient, config_from_settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
-from .models import MatchReport, PostMatchReport, RoomCreate, RoomJoin
+from .models import DevParseRequest, MatchReport, PostMatchReport, RoomCreate, RoomJoin
 from .security import JoinLimiter, TokenService, lan_addresses
 from .store import Store
 from .ws import Connection, ConnectionManager
@@ -303,6 +303,46 @@ def create_app(
         except RoomNotFound:
             raise ApiError("房间里还没有对局", code=1009, status=409) from None
         return ok({"artifactId": artifact.id, "synthetic": True})
+
+    @app.get("/api/v1/dev/demos")
+    def dev_list_demos():
+        """开发辅助：列出 CS_HELPER_LOCAL_DEMO_DIR 里的 .dem。"""
+
+        if not settings.DEV_MODE:
+            raise ApiError("开发模式未开启", code=1010, status=404)
+        try:
+            _root, items = devtools.list_local_demos()
+        except FileNotFoundError as exc:
+            raise ApiError(str(exc), code=1011, status=404) from None
+        return ok({"demos": items})
+
+    @app.post("/api/v1/dev/parse-local")
+    def dev_parse_local(
+        payload: DevParseRequest,
+        roomCode: str = Query(..., min_length=4, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        """开发辅助：用本机 .dem 跑真实解析，跳过 5E 检索与下载。"""
+
+        room, _member = require_room(authorization, roomCode)
+        if not settings.DEV_MODE:
+            raise ApiError("开发模式未开启", code=1010, status=404)
+        try:
+            artifact, bundle = hub.parse_dev_demo(room, payload.name)
+        except FileNotFoundError:
+            raise ApiError(f"找不到 demo：{payload.name}", code=1011, status=404) from None
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        except (RuntimeError, ValueError) as exc:
+            raise ApiError(f"解析失败：{exc}", code=2001, status=500) from None
+        return ok(
+            {
+                "artifactId": artifact.id,
+                "map": bundle.get("map"),
+                "players": len(bundle.get("players") or []),
+                "failed": bundle.get("failed") or [],
+            }
+        )
 
     # -- websocket ------------------------------------------------------
     @app.websocket("/ws")

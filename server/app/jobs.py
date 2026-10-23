@@ -31,6 +31,7 @@ log = logging.getLogger("cs-helper.jobs")
 
 EmitSession = Callable[[Session, str, dict[str, Any]], None]
 STREAM_EMIT_INTERVAL = 0.12
+THINKING_EMIT_INTERVAL = 0.8
 
 
 class AiClient(Protocol):
@@ -179,7 +180,24 @@ class JobManager:
 
         accumulated = ""
         last_emit = 0.0
-        for chunk in self._ai_client.stream(prompt):
+        # Reasoning models emit a hidden scratchpad first. Surface its size as a
+        # progress hint, otherwise the phone stares at an empty card for ~10s.
+        reason_chars = 0
+        last_reason_emit = 0.0
+
+        def on_reason(text: str) -> None:
+            nonlocal reason_chars, last_reason_emit
+            reason_chars += len(text)
+            now = time.monotonic()
+            if now - last_reason_emit >= THINKING_EMIT_INTERVAL:
+                last_reason_emit = now
+                self._emit_session(
+                    session,
+                    Action.AI_STREAM_CHUNK,
+                    {"sessionId": session.id, "phase": "thinking", "chars": reason_chars},
+                )
+
+        for chunk in self._ai_client.stream(prompt, on_reason=on_reason):
             if not chunk:
                 continue
             accumulated += chunk
@@ -189,15 +207,18 @@ class JobManager:
                 self._emit_session(
                     session,
                     Action.AI_STREAM_CHUNK,
-                    {"sessionId": session.id, "accumulated": accumulated},
+                    {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
                 )
 
         if not accumulated.strip():
             session.ai_state = "failed"
+            detail = "模型只输出了推理过程，没有正文，可调大 CS_HELPER_AI_MAX_TOKENS"
+            if reason_chars:
+                detail = f"{detail}（本次推理 {reason_chars} 字）"
             self._emit_session(
                 session,
                 Action.ROOM_ERROR,
-                {"code": 2005, "message": "AI 未返回内容", "retryable": True, "stage": "ai"},
+                {"code": 2005, "message": detail, "retryable": True, "stage": "ai"},
             )
             return
 
@@ -206,7 +227,7 @@ class JobManager:
         self._emit_session(
             session,
             Action.AI_STREAM_CHUNK,
-            {"sessionId": session.id, "accumulated": accumulated},
+            {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
         )
         self._emit_session(
             session,
@@ -295,6 +316,28 @@ class JobManager:
                     "retryable": True,
                     "stage": "demo",
                     "detail": outcome.error[:300],
+                },
+            )
+            return
+
+        # "No error" is not the same as "has data": when every player fails the
+        # pipeline still exits cleanly. Publishing an empty TACTICAL_PATHS_READY
+        # would show the phone a ready-but-blank path list with no explanation.
+        if not outcome.players:
+            session.demo_state = "failed"
+            reasons = "；".join(
+                f"{item.get('username') or '?'}: {item.get('reason') or '无可用录像'}"
+                for item in (outcome.failed or [])[:3]
+            )
+            self._emit_session(
+                session,
+                Action.ROOM_ERROR,
+                {
+                    "code": 2006,
+                    "message": "没有解析出任何轨迹",
+                    "retryable": True,
+                    "stage": "demo",
+                    "detail": reasons[:300],
                 },
             )
             return

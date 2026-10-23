@@ -45,7 +45,15 @@ body.player-mode header{display:none}
 .chip{background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
   padding:3px 9px;font-size:12px;color:var(--muted)}
 .chip.off{opacity:.45}
-#ai{white-space:pre-wrap;font-size:13px;color:#c9cfdd;min-height:20px}
+#ai{font-size:13px;color:#c9cfdd;min-height:20px}
+#ai.thinking{color:var(--muted);animation:pulse 1.4s ease-in-out infinite}
+#ai .ai-h{font-weight:600;color:var(--text);margin:11px 0 3px}
+#ai .ai-h:first-child{margin-top:0}
+#ai .ai-li{position:relative;padding-left:13px;margin:4px 0}
+#ai .ai-li::before{content:'·';position:absolute;left:3px;color:var(--dim)}
+#ai strong{color:var(--text);font-weight:600}
+#ai .ai-gap{height:7px}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
 
 .paths{display:grid;gap:8px}
 .score{display:flex;align-items:baseline;gap:10px}

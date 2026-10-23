@@ -16,6 +16,7 @@
 | `setup_maps.py` | demo/server | 从 `awpy get maps` 生成地图资源（CDN 有时 403） |
 | `import_radar.py` | 本项目新增 | 从本地解包的 `<map>.png` + `<map>.txt` 生成地图资源，离线可用 |
 | `job_runner.py` | 本项目新增 | 子进程入口：stdin 收任务、stdout 发 JSONL、退出码表成败 |
+| `parse_local.py` | 本项目新增 | 本地 .dem 直通：一次 open + 一次事件解析，逐人产出回放（跳过 5E 检索/下载） |
 
 **未迁入**（有意为之）：
 

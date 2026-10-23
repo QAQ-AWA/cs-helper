@@ -73,3 +73,31 @@ def test_seed_paths_is_unavailable_without_dev_mode(prod_client):
     )
     assert response.status_code == 404
     assert response.json()["code"] == 1010
+
+
+def test_local_demo_endpoints_need_dev_mode(prod_client):
+    assert prod_client.get("/api/v1/dev/demos").status_code == 404
+
+
+def test_local_demo_rejects_path_escape(dev_client, tmp_path, monkeypatch):
+    """`name` must resolve inside CS_HELPER_LOCAL_DEMO_DIR, not anywhere on disk."""
+
+    from app import settings as app_settings
+
+    inside = tmp_path / "inside"
+    inside.mkdir()
+    (inside / "real.dem").write_bytes(b"x")
+    monkeypatch.setattr(app_settings, "LOCAL_DEMO_DIR", str(inside))
+
+    listing = dev_client.get("/api/v1/dev/demos").json()["data"]["demos"]
+    assert [item["name"] for item in listing] == ["real.dem"]
+
+    room = _room_with_match(dev_client)
+    headers = {"Authorization": f"Bearer {room['token']}"}
+    escaped = dev_client.post(
+        f"/api/v1/dev/parse-local?roomCode={room['roomCode']}",
+        json={"name": "../../secret.dem"},
+        headers=headers,
+    )
+    assert escaped.status_code in (404, 500)
+    assert "secret" in escaped.json()["message"] or escaped.json()["code"] in (1011, 2001)

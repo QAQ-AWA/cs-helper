@@ -110,10 +110,7 @@ function handle(action, payload) {
       if (payload.match) {
         const roster = payload.profiles && payload.profiles.length ? { players: payload.profiles } : null;
         renderMatch(payload.match, roster);
-        if (payload.match.aiText) {
-          $('ai-card').classList.remove('hidden');
-          $('ai').textContent = payload.match.aiText;
-        }
+        if (payload.match.aiText) showAi(payload.match.aiText);
         if (payload.match.postReport) renderPostMatch(payload.match.postReport);
         if (payload.match.artifactId && !state.paths) loadPaths(payload.match.artifactId);
         else if (state.paths) renderPaths(state.paths);
@@ -124,10 +121,7 @@ function handle(action, payload) {
       break;
     case 'MATCH_DETECTED':
       renderMatch(payload);
-      if (payload.aiText) {
-        $('ai-card').classList.remove('hidden');
-        $('ai').textContent = payload.aiText;
-      }
+      if (payload.aiText) showAi(payload.aiText);
       if (payload.postReport) renderPostMatch(payload.postReport);
       break;
     case 'POST_MATCH_READY':
@@ -144,17 +138,44 @@ function handle(action, payload) {
       break;
     case 'AI_STREAM_CHUNK':
       $('ai-card').classList.remove('hidden');
-      $('ai').textContent = payload.accumulated || '';
+      if (payload.phase === 'thinking') {
+        $('ai').classList.add('thinking');
+        $('ai').textContent = `AI 正在推理对手数据…${payload.chars ? `（${payload.chars} 字）` : ''}`;
+      } else {
+        $('ai').classList.remove('thinking');
+        renderAiText(payload.accumulated || '');
+      }
       break;
     case 'AI_REPORT_READY':
-      $('ai-card').classList.remove('hidden');
-      if (typeof payload.report === 'string') $('ai').textContent = payload.report;
+      if (typeof payload.report === 'string') showAi(payload.report);
       break;
     case 'ROOM_ERROR':
       setConn('warn', payload.message || '服务端异常');
       $('demo-status').textContent = payload.message || '';
       break;
   }
+}
+
+/** Minimal Markdown: the model emits `##` headings, `**bold**` and `-` lists. */
+function renderAiText(text) {
+  const box = $('ai');
+  if (!text) {
+    box.textContent = '';
+    return;
+  }
+  const html = escapeHtml(text)
+    .replace(/^#{1,4}\s*(.+)$/gm, '<div class="ai-h">$1</div>')
+    .replace(/^[-*]\s+(.+)$/gm, '<div class="ai-li">$1</div>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n{2,}/g, '<div class="ai-gap"></div>')
+    .replace(/\n/g, '<br>');
+  box.innerHTML = html;
+}
+
+function showAi(text) {
+  $('ai-card').classList.remove('hidden');
+  $('ai').classList.remove('thinking');
+  renderAiText(text);
 }
 
 /* ---------- room view ---------- */

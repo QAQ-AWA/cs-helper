@@ -3,7 +3,7 @@
 替代上游 `demo/server/web_server.py`。Flask 版本是全局单例状态机（一个进程同时只能跑一个分析，`/api/analyze` 直接 409），无法承载多房间；这里改成 FastAPI + 每房间独立序号与事件环形缓冲。
 
 **已完成**：房间、对局上报、画像广播、WebSocket 增量与断线补齐；Demo 解析任务接入引擎（子进程隔离、进度流、不可变 artifact）。
-**未完成**：AI 编排（P4）、按房间配额、Redis 化。
+**未完成**：按房间配额、Redis 化、历史归档。
 
 ## 快速开始
 
@@ -85,7 +85,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 58 passed（含 node 无头渲染测试）
+cd server && python -m pytest tests -q     # 62 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -143,12 +143,29 @@ python import_radar.py --from-vpk "F:/SteamLibrary/steamapps/common/Counter-Stri
 | --- | --- | --- |
 | `CS_HELPER_AI_KEY` | 空 | 不填则跳过 AI 任务（`aiState=skipped`），其它功能不受影响 |
 | `CS_HELPER_AI_BASE_URL` | `https://api.deepseek.com/v1` | 任何 OpenAI 兼容端点（OpenAI / Gemini 兼容层 / Ollama） |
-| `CS_HELPER_AI_MODEL` | `deepseek-chat` | 模型名 |
-| `CS_HELPER_AI_TIMEOUT` | `60` | 单次请求超时（秒） |
-| `CS_HELPER_AI_MAX_TOKENS` | `700` | 输出上限 |
+| `CS_HELPER_AI_MODEL` | `deepseek-chat` | 模型名。DeepSeek 现役有 `deepseek-flash` / `deepseek-v4-pro` |
+| `CS_HELPER_AI_TIMEOUT` | `90` | 单次请求超时（秒） |
+| `CS_HELPER_AI_MAX_TOKENS` | `3000` | 输出上限（含推理模型的思考 token） |
+| `CS_HELPER_AI_THINKING` | `0` | 是否让推理模型先思考 |
 
-事件：`AI_STREAM_CHUNK{accumulated}` 流式推送 → `AI_REPORT_READY{report}` 收尾；
+### 为什么默认关思考
+
+实测 DeepSeek 的 `deepseek-flash` 会先输出隐藏的 `reasoning_content`：
+
+| 配置 | 首字延迟 | 总耗时 | 正文 |
+| --- | --- | --- | --- |
+| 思考开，`max_tokens=2000` | **10.5s** | 12.3s | 520 字 |
+| 思考关，`max_tokens=2000` | **0.8s** | 3.7s | 639 字 |
+
+准备阶段只有一分钟，10 秒空白不可接受，所以默认关闭。想更深的分析可设 `CS_HELPER_AI_THINKING=1`，
+此时服务端会把思考进度作为 `AI_STREAM_CHUNK{phase:"thinking", chars:N}` 推给手机（卡片显示"正在推理…"）。
+
+**注意**：推理模型的思考也占用 `max_tokens`。设太小（如 700）会出现"只思考、没正文"的空结果——
+服务端会回 `ROOM_ERROR 2005` 并说明原因，而不是笼统的"AI 未返回内容"。
+
+事件：`AI_STREAM_CHUNK{phase, accumulated}` 流式推送 → `AI_REPORT_READY{report}` 收尾；
 结果同时写入会话的 `aiText`，手机中途进房或断线重连都能直接看到全文。
+手机端会把 `## 标题` / `**粗体**` / `- 列表` 渲染成排版，而不是显示原始符号。
 
 ## 赛后战报
 
@@ -176,6 +193,26 @@ python tools/simulate_client.py --platform perfect --seed-paths --post-after 5
 ```
 
 `--platform perfect` 会跳过 Demo 检索，适合纯 UI 演示；`--seed-paths` 需要服务端 `CS_HELPER_DEV=1`，会给当前对局塞一条合成轨迹（纯开发用途，生产必须关闭）。
+
+### 用真实 .dem 验证回放（不需要 5E 网络）
+
+```bash
+export CS_HELPER_DEV=1
+export CS_HELPER_LOCAL_DEMO_DIR="D:/demos"   # 只有这个目录里的 .dem 可被读取
+
+curl http://127.0.0.1:8787/api/v1/dev/demos
+# {"demos":[{"name":"g161-..._de_mirage.dem","bytes":231036414}]}
+
+curl -X POST "http://127.0.0.1:8787/api/v1/dev/parse-local?roomCode=MAIN" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"name":"g161-..._de_mirage.dem"}'
+```
+
+服务端会调 `engine/parse_local.py`：**一次 open、一次事件解析**，然后逐人产出回放。
+实测 231MB / 22 回合的 5E 对局，10 人全量 **26–30 秒**，产出 1.8MB（gzip 后约 500KB）。
+
+`name` 只取 basename 并强制落在 `CS_HELPER_LOCAL_DEMO_DIR` 内，路径穿越会被拒；
+目录未配置时接口整体 404。
 
 ## 为什么解析跑子进程
 
