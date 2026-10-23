@@ -98,7 +98,7 @@ Demo 任务用真实 `engine/job_runner.py` 验证过子进程链路（进度行
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `CS_HELPER_DEMO` | `1` | 设为 `0` 关闭解析任务 |
-| `CS_HELPER_DEMO_MAX_DEMOS` | `6` | 每个对手取几场 Demo（1–10） |
+| `CS_HELPER_DEMO_MAX_DEMOS` | `1` | 每个对手取几场 Demo（1–10）。调大会线性增加下载时间 |
 | `CS_HELPER_DEMO_MODE` | `normal` | `normal` / `fast`（fast 走进程池并发） |
 | `CS_HELPER_WORK_DIR` | `.cache/jobs` | 每个任务独立的输出目录 |
 | `CS_HELPER_DEMO_DIR` | `engine/demos_opponents` | Demo 缓存（跨任务共享，用于去重） |
@@ -213,6 +213,17 @@ curl -X POST "http://127.0.0.1:8787/api/v1/dev/parse-local?roomCode=MAIN" \
 
 `name` 只取 basename 并强制落在 `CS_HELPER_LOCAL_DEMO_DIR` 内，路径穿越会被拒；
 目录未配置时接口整体 404。
+
+### 为什么默认每人只下 1 个 Demo
+
+一个 zip 约 130–230MB。10 人 × 6 个（引擎离线分析的默认值）≈ 4–5GB，
+赛前根本来不及；实测 4 人各 6 个跑到 4 分钟仍未完成。
+
+改成每人 1 个后，4 人缓存命中时 **49 秒**跑完（含 AI 3 秒）；
+首次需要真下载时，单人约 21 秒，10 人视带宽在 1–3 分钟。
+
+**结论：轨迹不可能稳定地在准备阶段内交付**，双档交付（画像/AI 秒级、轨迹异步补）不是选择而是必需。
+第二次遇到同一对手时缓存命中，才能做到 30 秒内出图。
 
 ## 为什么解析跑子进程
 

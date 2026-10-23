@@ -377,7 +377,10 @@ function mountReplay(replay) {
     state.renderer = null;
   }
   const stats = replay.combat_stats || {};
-  $('p-stats').textContent = `K/D ${fmt(stats.kd)} · AWP ${fmt(stats.awp_rate)}% · ${replay.round_count || 0} 回合`;
+  // These stats describe the parsed demo, not the player's lifetime average.
+  const awp = Number.isFinite(stats.awp_rate) ? `${Math.round(stats.awp_rate)}%` : '—';
+  $('p-stats').textContent =
+    `该场 K/D ${fmt(stats.kd)} · AWP ${awp} · ${replay.round_count || 0} 回合`;
   $('p-rounds').textContent = `${(replay.rounds || []).length} 段路径`;
 
   state.renderer = new ReplayPlayer($('replay'), {

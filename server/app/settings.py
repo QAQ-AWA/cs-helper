@@ -27,7 +27,10 @@ def _int_env(name: str, default: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
-DEMO_MAX_DEMOS = _int_env("CS_HELPER_DEMO_MAX_DEMOS", 6, 1, 10)
+# One demo per player is already ~20 rounds of opening paths. Six (the engine's
+# offline-analysis default) means 10 players x 6 x ~200MB over the LAN right
+# before a match starts; the download, not the parse, is the bottleneck.
+DEMO_MAX_DEMOS = _int_env("CS_HELPER_DEMO_MAX_DEMOS", 1, 1, 10)
 ARTIFACT_MAX_ITEMS = _int_env("CS_HELPER_ARTIFACT_MAX_ITEMS", 64, 4, 1024)
 
 # 单人/小队自用场景只需要一个房间；多房间码保留为开关，等真正需要时打开。
