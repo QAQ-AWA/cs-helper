@@ -117,7 +117,7 @@ CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
 # 测试
 cd server && pytest tests -q    # 123
 cd engine && pytest tests -q    # 111 passed, 10 skipped（需 328MB 集成 demo）
-cd desktop && npx vitest run    # 288
+cd desktop && npx vitest run    # 286
 ```
 
 ## 已踩过的坑（修过，勿再犯）
@@ -197,15 +197,32 @@ cd desktop && npx vitest run    # 288
 用户明确要求保留，实际也没动过（`git diff` 可证）：
 
 ```
-PlatformSelectView（完美 / 5E）
-  └─ 选 5E → phase='p5e-launch'
-       P5eLaunchView：探测并校验 5E 客户端路径 → 拉起 5E（CDP 9222）→ 等 hook
-       └─ emit('ready') → completeP5eSetup() → phase='main'
-            MatchAssistantView：本地 matches 为空 → MatchEmptyState（等待）
-            └─ 5E 开始匹配 → CDP/WS 截获 → injectMatch → MatchFeaturedPanel（标签页）
+（无平台选择页）启动即 P5eLaunchView
+  · 探测并校验 5E 客户端路径（持久化，下次自动带出）
+  · 拉起 5E（CDP 9222）→ 等 hook
+  └─ emit('ready') → completeP5eSetup() → phase='main'
+       MatchAssistantView：本地 matches 为空 → MatchEmptyState（等待）
+       └─ 5E 开始匹配 → CDP/WS 截获 → injectMatch → MatchFeaturedPanel（标签页）
 ```
 
-涉及文件：`useAppSession.ts`、`P5eLaunchView.vue`、`useP5eCdp.ts`、`MatchEmptyState.vue`（只加了 `relayLabel` 一行，其余未改）、`src-tauri/src/platform/*`。
+涉及文件：`useAppSession.ts`（已改成只有 `p5e-launch | main`）、`P5eLaunchView.vue`、`useP5eCdp.ts`、`MatchEmptyState.vue`、`src-tauri/src/platform/*`。
+
+### 0.2.2 移除完美世界（只做 5E）
+
+已删（用户可见面全部清掉）：
+
+- `PlatformSelectView.vue`、`PerfectAuthView.vue`、`usePerfectAuth.ts`（+测试）
+- `PerfectAccountSettingsSection.vue`、`PerfectApiDebugPanel.vue`
+- 设置页「登录管理」页签、标题栏完美账号状态、调试面板「完美 API」标签
+- `useAppSession` 去掉 `select-platform` / `perfect-auth` 两个阶段
+
+**仍保留**（被共享代码引用，删不掉）：
+
+- `src/platforms/perfect/*`：被客户端 AI（`core/ai/analysis-v3.ts`、`prompt.ts`）和队伍表格（`team-table-shared.ts`）引用
+- `useLogWatcher.ts`：完美世界的日志侦测器，`autoInit: false`，5E 下不启动
+- `src-tauri/src/platform/perfect_*.rs`：5 个模块 + `lib.rs` 的命令注册
+
+要彻底删干净，得先做「删掉客户端 AI 栈」这一刀（`src/core/ai/*` 约 4000 行 + `useAiAnalysis` + `AiAnalysisPanel` + `P5ePostMatchPanel` 的 AI 部分），再改 `team-table-shared` 的段位显示。这是一次独立重构，别和别的改动混在一起做。
 
 ### 0.3 数据从哪来（签名网关）
 
