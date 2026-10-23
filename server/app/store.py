@@ -285,6 +285,53 @@ class Store:
             room.members[member.id] = member
             return member
 
+    def restore_member(
+        self, room: Room, member_id: str, nickname: str, device_type: str
+    ) -> Member:
+        """Rebuild a member that only exists in a still-valid token.
+
+        Members live in memory; the token does not. After a server restart every
+        client holds a signed token whose member id is gone, and without this the
+        socket is rejected forever (the client keeps retrying the same token).
+        """
+
+        with self._lock:
+            existing = room.members.get(member_id)
+            if existing is not None:
+                return existing
+            member = Member(
+                id=member_id,
+                nickname=nickname or "队友",
+                device_type=device_type or "pc",
+                joined_at=time.time(),
+            )
+            room.members[member.id] = member
+            return member
+
+    def get_or_create_room(self, code: str) -> Room:
+        """Return the room, recreating it after a restart if needed.
+
+        Rooms are in-memory too, so a valid token can outlive its room. Creating
+        it on demand keeps the client's reconnect from failing forever.
+        """
+
+        with self._lock:
+            self._purge_locked()
+            normalised = self._normalise(code) or "MAIN"
+            room = self._rooms.get(normalised)
+            if room is None:
+                now = time.time()
+                room = Room(
+                    code=normalised,
+                    room_id=uuid.uuid4().hex,
+                    created_at=now,
+                    expires_at=now + self.room_ttl,
+                )
+                self._rooms[normalised] = room
+                self._rebind_latest_locked(room)
+            room.expires_at = time.time() + self.room_ttl
+            return room
+
     def ensure_room(
         self, code: str, nickname: str, device_type: str
     ) -> tuple[Room, Member, bool]:

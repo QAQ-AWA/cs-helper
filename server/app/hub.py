@@ -156,12 +156,22 @@ class RoomHub:
         payload = self.tokens.verify(token)
         if not payload:
             raise RoomNotFound("token")
-        room = self.store.get_room(str(payload.get("r", "")))
+        code = str(payload.get("r", ""))
+        room = self.store.get_room(code)
         if room is None:
-            raise RoomNotFound("room")
-        member = room.members.get(str(payload.get("m", "")))
+            # 房间也在内存里，重启后同样会消失；token 有效就按需重建。
+            room = self.store.get_or_create_room(code)
+        member_id = str(payload.get("m", ""))
+        member = room.members.get(member_id)
         if member is None:
-            raise RoomNotFound("member")
+            # 服务端重启后内存里的成员表丢了，但 token 签名与有效期都还在。
+            # 直接按 token 里的身份重建，否则客户端会拿着旧 token 无限重试 403。
+            member = self.store.restore_member(
+                room,
+                member_id,
+                str(payload.get("n", "")),
+                str(payload.get("d", "pc")),
+            )
         return room, member
 
     def on_connect(self, room: Room, member: Member) -> None:

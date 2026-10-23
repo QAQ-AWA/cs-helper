@@ -84,3 +84,25 @@ def test_lan_addresses_skip_proxy_tunnels_and_prefer_home_routers():
 
     # 192.168 beats 10.x beats 172.16-31.
     assert _lan_priority("192.168.3.46") < _lan_priority("10.0.0.8") < _lan_priority("172.20.1.5")
+
+
+def test_ws_token_survives_a_server_restart(client):
+    """重启后成员表是空的，旧 token 必须还能用（否则客户端 403 死循环）。"""
+    import time
+
+    host = client.post("/api/v1/room/create", json={"creatorNickname": "甲", "deviceType": "pc"}).json()["data"]
+    token = host["token"]
+    room_code = host["roomCode"]
+
+    # 模拟重启：把成员表清空，token 仍在有效期内。
+    hub = client.app.state.hub
+
+    # 模拟重启：房间与成员都在内存里，全部丢失，token 仍在有效期内。
+    hub.store._rooms.clear()
+
+    payload = hub.tokens.verify(token)
+    assert payload and payload["e"] > time.time()
+
+    room2, member = hub.authenticate(token)
+    assert room2.code == room_code
+    assert member.nickname == "甲"
