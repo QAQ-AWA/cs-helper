@@ -13,6 +13,8 @@ const props = defineProps<{
   platform?: PlatformId;
   p5ePhase?: P5eCdpPhase;
   p5eRecovering?: boolean;
+  /** Relay connection line, so "waiting" never hides whether sync is up. */
+  relayLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -177,6 +179,7 @@ onMounted(() => {
     >
       {{ hintText }}
     </p>
+    <p v-if="relayLabel" class="wait__relay">{{ relayLabel }}</p>
   </div>
 </template>
 
@@ -295,6 +298,16 @@ onMounted(() => {
   color: color-mix(in srgb, var(--color-fg) 42%, var(--color-accent-muted));
   user-select: none;
   z-index: 10;
+}
+
+.wait__relay {
+  margin-top: 0.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: var(--color-fg-muted);
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  user-select: none;
 }
 
 .wait__hint {

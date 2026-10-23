@@ -187,6 +187,26 @@ cd desktop && npx vitest run    # 288
 - `MatchFeaturedPanel` 的「分析」标签从客户端 `AiAnalysisPanel` 换成 `ServerAnalysisPanel`——**AI 只在服务端跑**，桌面端看到的是同一份结果。
 - 客户端原有的本地 AI 代码仍在（`src/core/ai/*`、`useAiAnalysis`），保留给离线/独立使用；要彻底删掉需要先做一轮真机视觉验收，见"未做"。
 
+**为什么之前"看不到分析页"**：桌面端主界面由**本地侦测到的对局**驱动（`matches[0]`），没侦测到就停在 `MatchEmptyState`，服务端房间里的会话根本不会渲染——分析存在，但没有地方显示。现在补了两层：
+
+- `ServerRoomPanel.vue`：本地还没对局、但服务端房间已有会话时，直接显示服务端阵容 + 分析（含恢复的历史对局，带时间戳）。
+- 等待页新增一行服务端状态（`已连接服务端房间 MAIN` / `未连接`），"等待中"不再对同步状态含糊。
+
+### 0.2.1 5E 启动链路（不要动）
+
+用户明确要求保留，实际也没动过（`git diff` 可证）：
+
+```
+PlatformSelectView（完美 / 5E）
+  └─ 选 5E → phase='p5e-launch'
+       P5eLaunchView：探测并校验 5E 客户端路径 → 拉起 5E（CDP 9222）→ 等 hook
+       └─ emit('ready') → completeP5eSetup() → phase='main'
+            MatchAssistantView：本地 matches 为空 → MatchEmptyState（等待）
+            └─ 5E 开始匹配 → CDP/WS 截获 → injectMatch → MatchFeaturedPanel（标签页）
+```
+
+涉及文件：`useAppSession.ts`、`P5eLaunchView.vue`、`useP5eCdp.ts`、`MatchEmptyState.vue`（只加了 `relayLabel` 一行，其余未改）、`src-tauri/src/platform/*`。
+
 ### 0.3 数据从哪来（签名网关）
 
 | 数据 | 来源 | 谁在抓 |

@@ -19,6 +19,8 @@ export interface ServerMatchView {
   aiText?: string | null;
   tacticsState?: string;
   tacticsText?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface ServerPlayerView {
