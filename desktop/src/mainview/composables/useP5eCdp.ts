@@ -716,6 +716,8 @@ export function useP5eCdp(
 
   // 每 15 秒把采集器状态推一条：eventsEmitted 是判断「Rust 到底有没有发出事件」
   // 的唯一可靠信号，光看 phase 会被「已连接」骗过去。
+  // 注意：必须在组合式函数初始化时就启动——「软件拉起 5E」走的是 launchAndCollect，
+  // 不会经过 startCollect，挂在那边就永远不触发。
   let statusHeartbeat: ReturnType<typeof setInterval> | null = null;
   function startStatusHeartbeat() {
     if (statusHeartbeat !== null) return;
@@ -729,12 +731,12 @@ export function useP5eCdp(
       );
     }, 15_000);
   }
+  startStatusHeartbeat();
 
   async function startCollect(options?: { port?: number; clientRoot?: string }) {
     lastError.value = null;
     try {
       status.value = await start5eCdpCollector(options);
-      startStatusHeartbeat();
     } catch (err) {
       lastError.value = localizeErrorMessage(err);
       throw err;
