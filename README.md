@@ -67,6 +67,16 @@ npm run build:exe    # 出单文件 exe（src-tauri/target/release/）
 
 在客户端的同步设置里把服务端地址填成 `http://<IP>:8787` 即可接入房间。
 
+### 构建与下载（无需本地 Rust）
+
+桌面端由 GitHub Actions 在 `windows-latest` 上构建：
+
+- 最新包：<https://github.com/QAQ-AWA/cs-test/releases/tag/latest-build>（每次 push `main` 自动更新）
+- 直链：<https://github.com/QAQ-AWA/cs-test/releases/download/latest-build/cs-match-helper.exe>
+- 打 `v*` tag 会生成正式 Release
+
+工作流在 `.github/workflows/build-desktop.yml`：单元测试 → 前端构建 → `tauri build --no-bundle` → 上传产物。
+
 ### 地图资源（回放必需）
 
 ```bash
