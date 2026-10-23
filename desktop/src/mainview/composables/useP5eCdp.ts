@@ -734,6 +734,10 @@ export function useP5eCdp(
   startStatusHeartbeat();
 
   async function startCollect(options?: { port?: number; clientRoot?: string }) {
+    // 事件监听只在 ensureReady 里注册，而本组合式函数是 autoInit:false 创建的。
+    // 不先调它，采集器照样连上 5E，但前端一个事件都收不到——表现就是
+    // 「采集器已启动」之后彻底安静。
+    await ensureReady();
     lastError.value = null;
     try {
       status.value = await start5eCdpCollector(options);
@@ -744,6 +748,8 @@ export function useP5eCdp(
   }
 
   async function launchAndCollect(options?: { clientRoot?: string }) {
+    // 同上：软件自己拉起 5E 这条路径必须先注册监听，否则采到的数据没人接。
+    await ensureReady();
     const clientRoot = options?.clientRoot;
     const probe = await probe5eEnvironment({ clientRoot });
     pushStatusLog(l('探测', 'Probe'), probe.message, probe.externalRunning ? 'WARN' : 'INFO');
