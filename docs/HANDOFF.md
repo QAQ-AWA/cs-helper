@@ -290,6 +290,34 @@ cd desktop && npx vitest run    # 286
 | Z大爷 | 外场 1 | A 1 / B 3 | 50.1s | 3 | 闪3 火6 雷1 烟2 |
 | Farewell-海海 | A 2 / 外场 6 | A 1 / B 2 | 47.9s | 1 | 烟3 闪1 |
 
+## 桌面端 UI 开发工具（本轮新增）
+
+改 UI 最大的障碍是**看不到界面**：这台机器没有 Rust/MSVC，`tauri dev` 起不来；出 exe 只能等 CI。为此补了三层：
+
+| 工具 | 位置 | 用途 |
+| --- | --- | --- |
+| `vue-tsc` | `desktop`（已装，新增 `npm run typecheck`） | 类型检查。`vite build` 用 esbuild **不做类型检查**，report-builder 那个「读不存在的字段」的 bug 就是这么潜伏三个月的 |
+| `@vue/test-utils` + `happy-dom` | `desktop` devDependencies | 组件级挂载测试。vitest 配置里补了 `@vitejs/plugin-vue`，否则 `.vue` 解析不了 |
+| `@playwright/test` + Chromium | `.tools/ui-check/`（gitignore） | 截图验收。浏览器内核装在该目录的 `browsers/`，不污染仓库 |
+
+**fixture 预览页**：`desktop/src/mainview/ui-preview/`，纯前端、不依赖 Tauri：
+
+```bash
+cd desktop && npx vite            # http://127.0.0.1:5173/ui-preview/index.html?state=ready
+```
+
+`state` 支持 `ready` / `no-ai` / `signature` / `empty`，覆盖服务端房间的四种状态。
+
+**截图**：
+
+```bash
+cd .tools/ui-check
+PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
+# 产出 shots/{ready,no-ai,signature,empty}.png
+```
+
+注意 `vue-tsc` 现存 **41 个存量错误**（`useCounterStrafing` 缺模块、`post-match.test.ts` 的 `stabilityReason` 等），**还不能接进 CI**，否则必挂。新代码至少要保证不新增错误。
+
 ## 未做 / 待验证
 
 - **桌面端只是"改造"，不是推倒重写**：`src/mainview` 仍有 2.7 万行，包含完美世界登录、平台选择、留言板、本地 AI 等本项目用不到的面。本轮换掉了「分析」页的数据来源，但 App 外壳、平台选择、设置页都还是旧的。彻底重写需要能真正跑起来的窗口做视觉验收（当前环境没有 Rust 工具链、没有显示器），建议分三步：① 删掉 perfect/comments/本地 AI 三条支线；② 收敛成单窗口「连接 → 对局 → 服务端结果」；③ 逐页做真机走查。

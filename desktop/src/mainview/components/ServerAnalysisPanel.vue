@@ -113,6 +113,9 @@ function renderMarkdown(text: string): string {
     .replace(/^#{1,4}\s*(.+)$/gm, '<div class="md-h">$1</div>')
     .replace(/^[-*]\s+(.+)$/gm, '<div class="md-li">$1</div>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    // Block elements already break the line; a stray <br> after them doubles
+    // the vertical rhythm and makes the report look sparse.
+    .replace(/<\/div>\n/g, '</div>')
     .replace(/\n{2,}/g, '<div class="md-gap"></div>')
     .replace(/\n/g, '<br>');
 }
@@ -179,6 +182,13 @@ function choose(side: 'ct' | 't' | null) {
         </p>
       </section>
 
+      <p v-if="match.homeError" class="mb-3 -mt-1 text-[11px] text-warning">
+        {{ match.homeError }}
+      </p>
+      <p v-else-if="match.homeState === 'partial'" class="mb-3 -mt-1 text-[11px] text-fg-muted">
+        赛季数据补全 {{ match.homeCoverage ?? 0 }} 人，其余用客户端上报值
+      </p>
+
       <section class="mb-3 rounded-lg border border-border bg-surface px-3 py-2">
         <h4 class="mb-1 text-xs font-medium text-fg-secondary">战术分析</h4>
         <div
@@ -199,10 +209,6 @@ function choose(side: 'ct' | 't' | null) {
         <p v-else class="text-xs text-fg-muted">{{ tacticsPlaceholder }}</p>
       </section>
 
-      <p v-if="match.homeError" class="text-[11px] text-warning">{{ match.homeError }}</p>
-      <p v-else-if="match.homeState === 'partial'" class="text-[11px] text-fg-muted">
-        赛季数据补全 {{ match.homeCoverage ?? 0 }} 人，其余用客户端上报值
-      </p>
     </template>
   </div>
 </template>
@@ -221,7 +227,7 @@ function choose(side: 'ct' | 't' | null) {
   position: relative;
 }
 .md-body :deep(.md-li::before) {
-  content: '·';
+  content: '•';
   position: absolute;
   left: 3px;
   color: var(--color-fg-muted);
