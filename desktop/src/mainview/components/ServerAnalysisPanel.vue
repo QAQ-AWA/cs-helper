@@ -15,6 +15,29 @@ const tacticsText = computed(
 );
 const mySide = computed(() => match.value?.mySide ?? null);
 
+/** Why the tactics card is empty — "skipped" must not read as "still working". */
+const tacticsPlaceholder = computed(() => {
+  const value = match.value;
+  if (!value) return '';
+  if (value.tacticsState === 'skipped') {
+    return value.aiState === 'skipped' ? '服务端未配置 AI key，只提供数据' : '这次没有可分析的轨迹';
+  }
+  if (value.tacticsState === 'running') return '正在读对面的开局轨迹…';
+  if (value.tacticsState === 'failed') return '开局预判生成失败，可稍后重试';
+  if (value.demoState === 'ready') return '等待服务端生成…';
+  if (value.demoState === 'running') return '轨迹解析中，完成后自动生成（首次 1–3 分钟）';
+  return '轨迹就绪后自动生成';
+});
+
+const analysisPlaceholder = computed(() => {
+  const value = match.value;
+  if (!value) return '';
+  if (value.aiState === 'skipped') return '服务端未配置 AI key，只提供数据';
+  if (value.aiState === 'running') return 'AI 正在生成战术分析…';
+  if (value.aiState === 'failed') return '战术分析生成失败';
+  return '等待服务端生成…';
+});
+
 const SIDE_LABEL: Record<string, string> = { ct: 'CT', t: 'T' };
 
 const sourceHint = computed(() => {
@@ -163,9 +186,7 @@ function choose(side: 'ct' | 't' | null) {
           class="md-body text-[13px] leading-relaxed text-fg"
           v-html="renderMarkdown(aiText)"
         />
-        <p v-else class="text-xs text-fg-muted">
-          {{ match.aiState === 'skipped' ? '服务端未配置 AI key，只提供数据' : '等待服务端生成…' }}
-        </p>
+        <p v-else class="text-xs text-fg-muted">{{ analysisPlaceholder }}</p>
       </section>
 
       <section class="mb-3 rounded-lg border border-border bg-surface px-3 py-2">
@@ -175,13 +196,7 @@ function choose(side: 'ct' | 't' | null) {
           class="md-body text-[13px] leading-relaxed text-fg"
           v-html="renderMarkdown(tacticsText)"
         />
-        <p v-else class="text-xs text-fg-muted">
-          {{
-            match.demoState === 'ready'
-              ? '等待轨迹分析…'
-              : '轨迹解析完成后自动生成（首次 1–3 分钟）'
-          }}
-        </p>
+        <p v-else class="text-xs text-fg-muted">{{ tacticsPlaceholder }}</p>
       </section>
 
       <p v-if="match.homeError" class="text-[11px] text-warning">{{ match.homeError }}</p>
