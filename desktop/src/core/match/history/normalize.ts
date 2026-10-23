@@ -1,5 +1,5 @@
 import type { AiAnalysisResult, AiTokenUsage } from '@core/ai/types';
-import { normalizeAiAnalysisResult } from '@core/ai/analysis-v2';
+import { normalizeAiAnalysisResult } from '@core/ai/normalize';
 import type {
   MatchDetail,
   MatchInsights,

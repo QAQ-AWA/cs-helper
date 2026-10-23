@@ -3,16 +3,6 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWindow, PhysicalSize, UserAttentionType } from '@tauri-apps/api/window';
-import type {
-  AiAnalysisDeltaEvent,
-  AiAnalysisDoneEvent,
-  AiAnalysisErrorEvent,
-  AiAnalysisCancelledEvent,
-  AiAnalysisStartEvent,
-  AiSettingsPublic,
-  SaveAiSettingsInput,
-  StartAiAnalysisInput,
-} from '@core/ai/types';
 import type { DownloadUpdateResult, UpdateCheckResult, UpdateProgressEvent } from '@core/update/types';
 import type { ChangelogReleaseDetail, ChangelogReleaseSummary } from '@core/update/changelog';
 import type { LogLinePayload, WatcherStatus } from '@core/types';
@@ -172,66 +162,6 @@ export async function onWatcherStatus(
   handler: (status: WatcherStatus) => void,
 ): Promise<UnlistenFn> {
   return listen<WatcherStatus>('watcher-status', (event) => {
-    handler(event.payload);
-  });
-}
-
-export async function getAiSettingsPath(): Promise<string> {
-  return invoke<string>('get_ai_settings_path');
-}
-
-export async function loadAiSettings(): Promise<AiSettingsPublic> {
-  return invoke<AiSettingsPublic>('load_ai_settings');
-}
-
-export async function saveAiSettings(input: SaveAiSettingsInput): Promise<AiSettingsPublic> {
-  return invoke<AiSettingsPublic>('save_ai_settings', { input });
-}
-
-export async function startAiAnalysis(input: StartAiAnalysisInput): Promise<void> {
-  await invoke('start_ai_analysis', { input });
-}
-
-export async function cancelAiAnalysis(): Promise<void> {
-  await invoke('cancel_ai_analysis');
-}
-
-export async function onAiAnalysisStart(
-  handler: (event: AiAnalysisStartEvent) => void,
-): Promise<UnlistenFn> {
-  return listen<AiAnalysisStartEvent>('ai-analysis-start', (event) => {
-    handler(event.payload);
-  });
-}
-
-export async function onAiAnalysisDelta(
-  handler: (event: AiAnalysisDeltaEvent) => void,
-): Promise<UnlistenFn> {
-  return listen<AiAnalysisDeltaEvent>('ai-analysis-delta', (event) => {
-    handler(event.payload);
-  });
-}
-
-export async function onAiAnalysisDone(
-  handler: (event: AiAnalysisDoneEvent) => void,
-): Promise<UnlistenFn> {
-  return listen<AiAnalysisDoneEvent>('ai-analysis-done', (event) => {
-    handler(event.payload);
-  });
-}
-
-export async function onAiAnalysisError(
-  handler: (event: AiAnalysisErrorEvent) => void,
-): Promise<UnlistenFn> {
-  return listen<AiAnalysisErrorEvent>('ai-analysis-error', (event) => {
-    handler(event.payload);
-  });
-}
-
-export async function onAiAnalysisCancelled(
-  handler: (event: AiAnalysisCancelledEvent) => void,
-): Promise<UnlistenFn> {
-  return listen<AiAnalysisCancelledEvent>('ai-analysis-cancelled', (event) => {
     handler(event.payload);
   });
 }

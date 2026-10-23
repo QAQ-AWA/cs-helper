@@ -3,7 +3,7 @@ import { formatDebugLogEntriesForCopy } from '@core/log/format-debug-log';
 import type { DebugLogEntry } from '@core/log/types';
 import type { WatcherStatus } from '@core/types';
 import { MOCK_RELEASE_NOTES } from '@core/update/mock-release-notes';
-import { Bug, ChevronDown, Code2, Database, MessageSquare, ScrollText, X } from 'lucide-vue-next';
+import { Bug, ChevronDown, Code2, MessageSquare, ScrollText, X } from 'lucide-vue-next';
 import { computed, nextTick, ref, watch } from 'vue';
 import { getActivePlatform } from '@platforms/registry';
 import {
@@ -39,7 +39,6 @@ const props = withDefaults(
     initialOpen?: boolean;
     logEntries?: DebugLogEntry[];
     watcher?: WatcherStatus;
-    injectAiResult?: (raw: string) => Promise<string | null>;
     replayPerfectFixture?: () => Promise<void>;
     p5e?: ReturnType<typeof useP5eCdp>;
     comments?: ReturnType<typeof useComments>;
@@ -56,7 +55,6 @@ const props = withDefaults(
       fileSize: 0,
       linesReceived: 0,
     }),
-    injectAiResult: undefined,
   },
 );
 
@@ -67,7 +65,7 @@ const emit = defineEmits<{
 }>();
 
 type DebugTab = 'inject' | 'decrypt' | 'logs';
-type InjectSubTab = 'match' | 'p5e' | 'ai' | 'comments' | 'history' | 'update' | 'runtime';
+type InjectSubTab = 'match' | 'p5e' | 'comments' | 'history' | 'update' | 'runtime';
 type LogSubTab = 'perfect' | 'p5e';
 
 const isDev = import.meta.env.DEV;
@@ -88,7 +86,6 @@ const activeTab = ref<DebugTab>('inject');
 const injectSubTab = ref<InjectSubTab>('match');
 const logSubTab = ref<LogSubTab>('perfect');
 const input = ref('');
-const aiInput = ref('');
 const error = ref('');
 const aiError = ref('');
 const autoScroll = ref(true);
@@ -272,39 +269,6 @@ function submit() {
   if (props.placement === 'header') {
     open.value = false;
   }
-}
-
-async function submitAi() {
-  aiError.value = '';
-  const raw = aiInput.value.trim();
-  if (!raw) {
-    aiError.value = l('请粘贴 AI 分析 JSON', 'Paste an AI analysis JSON payload');
-    return;
-  }
-  const inject = props.injectAiResult;
-  if (inject) {
-    const err = await inject(raw);
-    if (err) {
-      aiError.value = err;
-      return;
-    }
-  } else {
-    emit('injectAi', raw);
-  }
-  aiInput.value = '';
-  if (props.placement === 'header') {
-    open.value = false;
-  }
-}
-
-function fillAiV3Fixture() {
-  const fixture = undefined;
-  if (!fixture) {
-    aiError.value = l('请先注入或接收一条匹配数据', 'Inject or receive match data first');
-    return;
-  }
-  aiError.value = '';
-  aiInput.value = fixture;
 }
 
 function openMockComments(scenario: 'list' | 'empty' | 'loading' | 'error' = 'list') {
@@ -589,18 +553,6 @@ watch(
               type="button"
               class="shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors"
               :class="
-                injectSubTab === 'ai'
-                  ? 'bg-surface text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg-secondary'
-              "
-              @click="switchInjectSubTab('ai')"
-            >
-              AI
-            </button>
-            <button
-              type="button"
-              class="shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors"
-              :class="
                 injectSubTab === 'comments'
                   ? 'bg-surface text-fg shadow-sm'
                   : 'text-fg-muted hover:text-fg-secondary'
@@ -728,36 +680,6 @@ watch(
               @click="replayP5eNdjson"
             >
               {{ l('NDJSON 回放', 'Replay NDJSON') }}
-            </button>
-          </div>
-        </div>
-
-        <div v-else-if="injectSubTab === 'ai'" class="space-y-3">
-          <p class="text-[11px] leading-relaxed text-fg-muted">
-            {{ l('粘贴 AI 分析 JSON，直接预览结果面板（需先有当前匹配数据）。', 'Paste AI analysis JSON to preview the result panel. Current match data is required.') }}
-          </p>
-          <button
-            type="button"
-            class="inline-flex min-h-9 cursor-pointer items-center rounded-md border border-border bg-surface px-3 text-[11px] font-medium text-fg-secondary transition-[background-color,transform] duration-200 hover:bg-elevated active:scale-[0.96]"
-            @click="fillAiV3Fixture"
-          >
-            {{ l('填入当前对局 V3 Fixture', 'Fill current-match V3 fixture') }}
-          </button>
-          <textarea
-            v-model="aiInput"
-            class="h-36 w-full resize-y rounded-md border border-border bg-base px-3 py-2 font-mono text-[11px] leading-relaxed text-fg outline-none transition-colors focus:border-accent"
-            placeholder='{"schemaVersion":3,"modelWinProbability":{"A":58,"B":42},"headline":"...","playerSignals":[...]}'
-            spellcheck="false"
-          />
-          <div class="flex items-center justify-between gap-3">
-            <p v-if="aiError" class="text-[11px] text-danger">{{ aiError }}</p>
-            <span v-else />
-            <button
-              type="button"
-              class="shrink-0 cursor-pointer rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white transition-colors duration-200 hover:bg-accent-hover"
-              @click="submitAi"
-            >
-              {{ l('注入 AI 结果', 'Inject AI result') }}
             </button>
           </div>
         </div>

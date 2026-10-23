@@ -2,12 +2,14 @@
 import { computed, ref } from 'vue';
 import type { MatchRecord } from '@core/match/models';
 import type { P5ePostMatchReport } from '@platforms/5e/post-match';
+import type { AiAnalysisResult } from '@core/ai/types';
 import type { useTeamSync } from '../composables/useTeamSync';
 import { useMatchCountdown } from '../composables/useMatchCountdown';
 import RosterBoard from './RosterBoard.vue';
 import ServerAnalysisPanel from './ServerAnalysisPanel.vue';
 import TacticalPathsPanel from './TacticalPathsPanel.vue';
 import PostMatchBoard from './PostMatchBoard.vue';
+import StoredAiReport from './StoredAiReport.vue';
 
 /**
  * One match, four questions: who is playing, what does the relay think, where
@@ -20,6 +22,8 @@ const props = defineProps<{
   sync?: ReturnType<typeof useTeamSync>;
   historyMode?: boolean;
   initialPostMatch?: P5ePostMatchReport | null;
+  /** 历史回放里存下来的 AI 报告（只读展示，不再调模型）。 */
+  storedAi?: AiAnalysisResult | null;
   /** Deep-link / screenshot support; the app always starts on the roster. */
   initialTab?: Tab;
 }>();
@@ -113,11 +117,15 @@ const postReport = computed(
         :profiles="sync?.serverProfiles.value"
       />
       <ServerAnalysisPanel v-else-if="activeTab === 'analysis' && hasAnalysis" :sync="sync!" />
+      <StoredAiReport
+        v-else-if="activeTab === 'analysis' && storedAi"
+        :report="storedAi"
+      />
       <div
         v-else-if="activeTab === 'analysis'"
         class="flex h-full items-center justify-center px-6 text-center text-sm text-fg-muted"
       >
-        历史回放不包含服务端分析
+        这一局没有留下 AI 分析
       </div>
       <TacticalPathsPanel v-else-if="activeTab === 'paths'" />
       <PostMatchBoard

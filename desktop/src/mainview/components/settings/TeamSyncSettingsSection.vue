@@ -129,7 +129,7 @@ function handleCopy() {
           type="button"
           class="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-fg-secondary hover:text-fg"
           :disabled="busy"
-          @click="run(disconnect)"
+          @click="run(async () => disconnect())"
         >
           <LogOut class="h-3 w-3" />断开
         </button>

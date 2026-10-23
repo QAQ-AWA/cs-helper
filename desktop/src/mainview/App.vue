@@ -4,7 +4,6 @@ import { MotionConfig } from 'motion-v';
 import CopyToast from './components/CopyToast.vue';
 import CloseConfirmDialog from './components/CloseConfirmDialog.vue';
 import TitleBar from './components/TitleBar.vue';
-import { useAiAnalysis } from './composables/useAiAnalysis';
 import { useAppSession } from './composables/useAppSession';
 import { useComments } from './composables/useComments';
 import { useLogWatcher } from './composables/useLogWatcher';
@@ -17,7 +16,6 @@ import MatchAssistantView from './views/MatchAssistantView.vue';
 import SettingsView, { type SettingsTab } from './views/SettingsView.vue';
 import { startupMark } from './utils/startup-metrics';
 import { requestMatchAttention } from './native';
-import { localize as l } from './i18n';
 
 startupMark('app setup start');
 
@@ -58,34 +56,6 @@ const p5e = useP5eCdp(
     onNewMatch: flashTaskbarForNewMatch,
   },
 );
-const ai = useAiAnalysis({
-  autoInit: false,
-  onAnalysisSettled: (payload) => {
-    const current = matches.value[0];
-    const fromIndex = matchHistory.index.value?.entries.find((e) => e.id === payload.matchId);
-    const platformId =
-      current && current.id === payload.matchId
-        ? matchHistory.platformOf(current)
-        : fromIndex?.platformId ?? current?.platformId ?? 'unknown';
-    void matchHistory
-      .patchMatchAi(payload.matchId, platformId, {
-        status: payload.status,
-        result: payload.result,
-        usage: payload.usage,
-        elapsedMs: payload.elapsedMs,
-        error: payload.error,
-        model: payload.model,
-        providerMode: payload.providerMode,
-        analyzedAt: payload.analyzedAt,
-        locale: payload.locale,
-        fallbackRecord: current && current.id === payload.matchId ? current : null,
-      })
-      .catch(() => {
-        // 历史写入失败不阻断 AI 展示
-      });
-  },
-});
-
 const teamSync = useTeamSync();
 const teamSyncDialogOpen = ref(false);
 
@@ -158,12 +128,6 @@ onMounted(() => {
 
 startupMark('app setup end');
 
-async function injectAiResult(raw: string): Promise<string | null> {
-  const match = matches.value[0];
-  if (!match) return l('请先注入或接收一条匹配数据', 'Inject or receive match data first');
-  return ai.injectResult(match, raw, undefined);
-}
-
 type AppView = 'main' | 'settings';
 
 const currentView = ref<AppView>('main');
@@ -216,7 +180,6 @@ function onBackFromP5e() {
       :view="currentView"
       :inject-match="injectMatch"
       :replay-perfect-fixture="replayPerfectFixture"
-      :inject-ai-result="injectAiResult"
       :p5e="p5e"
       :log-entries="logEntries"
       :watcher="watcher"
@@ -252,7 +215,6 @@ function onBackFromP5e() {
             v-else
             key="match-assistant"
             class="h-full"
-            :ai="ai"
             :sync="teamSync"
             :comments="comments"
             :matches="matches"

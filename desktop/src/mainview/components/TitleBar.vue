@@ -29,7 +29,6 @@ const props = defineProps<{
   view: 'main' | 'settings';
   injectMatch: (data: Record<string, unknown>) => void;
   replayPerfectFixture: () => Promise<void>;
-  injectAiResult: (raw: string) => Promise<string | null>;
   p5e: ReturnType<typeof import('../composables/useP5eCdp').useP5eCdp>;
   logEntries: DebugLogEntry[];
   watcher: WatcherStatus;
@@ -100,7 +99,6 @@ const showBackButton = computed(() => props.view === 'settings');
         :initial-open="debugPanelInitialOpen"
         :log-entries="logEntries"
         :watcher="watcher"
-        :inject-ai-result="injectAiResult"
         :replay-perfect-fixture="replayPerfectFixture"
         :p5e="p5e"
         :comments="comments"

@@ -18,6 +18,7 @@ import ServerRoomPanel from '../components/ServerRoomPanel.vue';
 import TeamSyncSettingsSection from '../components/settings/TeamSyncSettingsSection.vue';
 import AboutSettingsSection from '../components/settings/AboutSettingsSection.vue';
 import MatchHistoryListRow from '../components/match-history/MatchHistoryListRow.vue';
+import StoredAiReport from '../components/StoredAiReport.vue';
 
 type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty';
 
@@ -217,6 +218,29 @@ async function bootstrap() {
     render: () => {
       if (view === 'sync') return h(TeamSyncSettingsSection);
       if (view === 'about') return h('div', { class: 'max-w-2xl p-6' }, [h(AboutSettingsSection)]);
+      if (view === 'stored-ai') {
+        const report = {
+          schemaVersion: 3,
+          predictedWinner: 'A',
+          winProbability: { A: 58, B: 42 },
+          modelWinProbability: { A: 58, B: 42 },
+          confidence: 72,
+          dataCoverage: 0.8,
+          headline: 'A 队略占上风，优势主要来自开局首杀与道具协同。',
+          decisiveFactors: [
+            { id: 'f1', dimension: 'opening', advantage: 'A', impact: 3, title: '首杀转化更高', summary: 'A 队首杀成功率 31%，高于 B 队 24%，前期更容易拿到人数优势。', evidenceIds: [] },
+            { id: 'f2', dimension: 'utility', advantage: 'A', impact: 2, title: '道具覆盖更完整', summary: 'A 队 ADR 与 RWS 均高于对手，说明道具交换更占优。', evidenceIds: [] },
+          ],
+          playerSignals: [
+            { steamId: '1', side: 'A', kind: 'carry', impact: 3, title: '半团空气 状态火热', summary: 'ADR 96、Rating 1.32，是 A 队最稳定的输出点。', evidenceIds: [] },
+            { steamId: '2', side: 'B', kind: 'weakLink', impact: 2, title: 'Farewell-海海 偏弱', summary: 'K/D 0.91、ADR 71，对枪中容易被突破。', evidenceIds: [] },
+          ],
+          teamPlans: { A: { winConditions: [], risks: [] }, B: { winConditions: [], risks: [] } },
+          uncertainties: ['B 队地图样本只有 3 场，结论仅供参考。'],
+          dataQuality: '',
+        };
+        return h('div', { class: 'max-w-2xl p-6' }, [h(StoredAiReport, { report: report as never })]);
+      }
       if (view === 'history') {
         const items = [
           { id: 'm1', platformId: '5e', savedAt: Date.now(), updatedAt: Date.now(), matchTime: '10-23 20:15', mapName: 'de_mirage', playerCount: 10, matchAvgScore: 2410, postMatchScore: '13 : 10', postMatchWinner: 'A', hasPostMatch: true, aiStatus: 'ready' },

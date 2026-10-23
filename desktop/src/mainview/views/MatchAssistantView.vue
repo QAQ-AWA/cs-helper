@@ -3,7 +3,6 @@ import { computed } from 'vue';
 import type { MatchRecord } from '@core/match/models';
 import type { WatcherStatus } from '@core/types';
 import type { PlatformId } from '@platforms/types';
-import type { useAiAnalysis } from '../composables/useAiAnalysis';
 import type { useComments } from '../composables/useComments';
 import type { useMatchHistory } from '../composables/useMatchHistory';
 import type { useP5eCdp } from '../composables/useP5eCdp';
@@ -14,7 +13,6 @@ import MatchWorkspace from '../components/MatchWorkspace.vue';
 import ServerRoomPanel from '../components/ServerRoomPanel.vue';
 
 const props = defineProps<{
-  ai: ReturnType<typeof useAiAnalysis>;
   sync: ReturnType<typeof useTeamSync>;
   comments: ReturnType<typeof useComments>;
   matches: MatchRecord[];

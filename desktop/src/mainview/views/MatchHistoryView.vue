@@ -8,7 +8,6 @@ import MatchHistoryListShell, {
   type PlatformFilter,
 } from '../components/match-history/MatchHistoryListShell.vue';
 import MatchHistoryPagination from '../components/match-history/MatchHistoryPagination.vue';
-import { useAiAnalysis } from '../composables/useAiAnalysis';
 import type { MatchHistoryApi } from '../composables/useMatchHistory';
 import type { useComments } from '../composables/useComments';
 import {
@@ -23,7 +22,7 @@ const PAGE_SIZE = 20;
 
 const props = defineProps<{
   history: MatchHistoryApi;
-  comments: ReturnType<typeof useComments>;
+  comments?: ReturnType<typeof useComments>;
   viewerSteamId?: string;
   /** 历史 Tab 是否可见；用于在显示后再触发列表入场动画 */
   visible?: boolean;
@@ -51,33 +50,6 @@ watch(
   },
   { immediate: true },
 );
-
-const detailAi = useAiAnalysis({
-  autoInit: false,
-  onAnalysisSettled: (payload) => {
-    const vm = detailVm.value;
-    const platformId =
-      vm?.document.platformId ??
-      vm?.record?.platformId ??
-      vm?.record?.detail.platformId ??
-      'unknown';
-    void props.history
-      .patchMatchAi(payload.matchId, platformId, {
-        status: payload.status,
-        result: payload.result,
-        usage: payload.usage,
-        elapsedMs: payload.elapsedMs,
-        error: payload.error,
-        model: payload.model,
-        providerMode: payload.providerMode,
-        analyzedAt: payload.analyzedAt,
-        fallbackRecord: vm?.record ?? null,
-      })
-      .catch(() => {
-        // 历史写入失败不阻断 AI 展示
-      });
-  },
-});
 
 const filteredEntries = computed(() => {
   const list = props.history.listItems.value.filter((item) =>
@@ -127,8 +99,6 @@ async function openEntry(item: MatchHistoryListItem) {
       return;
     }
     detailVm.value = vm;
-    await detailAi.ensureSettingsLoaded();
-    detailAi.hydrateFromHistory(vm.document.id, vm.ai);
     detailReady.value = true;
   } catch (e) {
     detailError.value = e instanceof Error ? e.message : String(e);
@@ -138,10 +108,6 @@ async function openEntry(item: MatchHistoryListItem) {
 }
 
 async function backToList() {
-  const s = detailAi.status.value;
-  if (s === 'loading' || s === 'streaming') {
-    await detailAi.stop();
-  }
   selectedKey.value = null;
   detailVm.value = null;
   detailReady.value = false;
@@ -264,6 +230,7 @@ onMounted(() => {
             history-mode
             :match="detailVm.record"
             :initial-post-match="detailVm.postMatch"
+            :stored-ai="detailVm.ai?.result ?? null"
             @post-match-updated="onPostMatchUpdated"
           />
         </div>
