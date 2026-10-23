@@ -42,26 +42,38 @@ def build_profile_payload(session_id: str, report: dict[str, Any]) -> dict[str, 
     }
 
 
-def resolve_my_side(report: dict[str, Any]) -> str | None:
-    """Which roster block is ours, or ``None`` when the report cannot say.
+def resolve_side(
+    report: dict[str, Any], library_side: str | None = None
+) -> tuple[str | None, str | None]:
+    """Which roster block is ours, and how we know.
 
-    Three signals, strongest first: an explicit choice, the client marking the
-    local player, and a party tag on one side. Anything ambiguous returns
-    ``None`` so we fall back to analysing all ten rather than guessing wrong.
+    Precedence: an explicit pick beats everything (the user just told us), then
+    the ID library (we have seen these people on our side before), then the
+    client's own markers. Anything ambiguous returns ``(None, None)`` so we fall
+    back to analysing all ten rather than guessing wrong.
     """
 
     explicit = report.get("mySide")
     if explicit in ("ct", "t"):
-        return explicit
+        return explicit, "explicit"
+    if report.get("analyzeAll") is True:
+        # "Analyze both" must beat the library, otherwise the choice is a no-op.
+        return None, "explicit-all"
+    if library_side in ("ct", "t"):
+        return library_side, "library"
 
     teams = report.get("teams") or {}
     for side in ("ct", "t"):
         if any(player.get("isSelf") for player in teams.get(side) or []):
-            return side
+            return side, "self"
     for side in ("ct", "t"):
         if any(player.get("partyTag") for player in teams.get(side) or []):
-            return side
-    return None
+            return side, "party"
+    return None, None
+
+
+def resolve_my_side(report: dict[str, Any], library_side: str | None = None) -> str | None:
+    return resolve_side(report, library_side)[0]
 
 
 def opponent_side(side: str | None) -> str | None:
@@ -72,7 +84,9 @@ def opponent_side(side: str | None) -> str | None:
     return None
 
 
-def demo_targets(report: dict[str, Any]) -> list[dict[str, Any]]:
+def demo_targets(
+    report: dict[str, Any], library_side: str | None = None
+) -> list[dict[str, Any]]:
     """Players whose demos we actually need.
 
     With a known side this is the opposing five: half the downloads, half the
@@ -80,7 +94,7 @@ def demo_targets(report: dict[str, Any]) -> list[dict[str, Any]]:
     """
 
     players = normalise_players(report)
-    my_side = resolve_my_side(report)
+    my_side = resolve_my_side(report, library_side)
     if my_side is None:
         return players
     opponents = [player for player in players if player["team"] != my_side]
@@ -88,7 +102,9 @@ def demo_targets(report: dict[str, Any]) -> list[dict[str, Any]]:
     return opponents or players
 
 
-def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
+def to_engine_hints(
+    report: dict[str, Any], library_side: str | None = None
+) -> list[dict[str, str]] | None:
     """Build ``player_hints`` for ``pipeline.run``.
 
     The engine only knows how to discover 5E demos, and it needs a 5E ``domain``
@@ -100,7 +116,7 @@ def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
         return None
 
     hints: list[dict[str, str]] = []
-    for player in demo_targets(report):
+    for player in demo_targets(report, library_side):
         nickname = (player.get("nickname") or "").strip()
         domain = (player.get("platformUserId") or "").strip()
         steam_id = (player.get("steamId") or "").strip()
@@ -110,10 +126,12 @@ def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
     return hints or None
 
 
-def demo_job_targets(report: dict[str, Any]) -> list[str]:
+def demo_job_targets(
+    report: dict[str, Any], library_side: str | None = None
+) -> list[str]:
     """Nicknames handed to the engine, in the same order as ``to_engine_hints``."""
 
-    return [player["nickname"] for player in demo_targets(report)]
+    return [player["nickname"] for player in demo_targets(report, library_side)]
 
 
 def nickname_index(report: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:

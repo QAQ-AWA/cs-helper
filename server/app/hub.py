@@ -12,6 +12,7 @@ from .adapters import normalise_players
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner
 from .events import Action
+from .identity import IdentityStore
 from .jobs import JobManager
 from .persistence import SessionRepository
 from .security import TokenService
@@ -38,6 +39,7 @@ class RoomHub:
         ai_client: object | None = None,
         repository: SessionRepository | None = None,
         history_days: int | None = None,
+        identity: IdentityStore | None = None,
     ) -> None:
         self.store = store
         self.tokens = tokens
@@ -45,6 +47,7 @@ class RoomHub:
         self.artifacts = artifacts or ArtifactStore()
         self.repository = repository
         self.history_days = history_days if history_days is not None else settings.HISTORY_DAYS
+        self.identity = identity or IdentityStore()
         self.last_reap: dict[str, Any] | None = None
         self.jobs = JobManager(  # type: ignore[arg-type]
             self.emit_session,
@@ -52,6 +55,7 @@ class RoomHub:
             demo_runner,
             ai_client,
             on_change=self.persist,
+            side_resolver=self.resolved_side,
         )
         self.room_mode = room_mode or settings.ROOM_MODE
         self.single_room_code = single_room_code or settings.SINGLE_ROOM_CODE
@@ -74,11 +78,41 @@ class RoomHub:
         return {
             "roomCode": room.code,
             "members": [member.to_wire() for member in room.members.values()],
-            "match": session.to_wire() if session else None,
+            "match": self.session_view(session) if session else None,
             # A client joining mid-match must not depend on replaying history.
             "profiles": session.profiles if session else None,
             "latestSeq": room.seq,
         }
+
+    # -- identity ------------------------------------------------------
+    def resolved_side(self, session: Session) -> str | None:
+        """The side we treat as ours, including the ID library's opinion."""
+
+        from .adapters import resolve_my_side
+
+        library_side = self.identity.match(session.room_code or "", session.report)
+        return resolve_my_side(session.report, library_side)
+
+    def session_view(self, session: Session) -> dict[str, Any]:
+        """``to_wire`` plus the resolved side and where it came from."""
+
+        from .adapters import resolve_side
+
+        view = session.to_wire()
+        library_side = self.identity.match(session.room_code or "", session.report)
+        side, source = resolve_side(session.report, library_side)
+        view["mySide"] = side
+        view["mySideSource"] = source
+        return view
+
+    def learn_identity(self, room: Room, side: str) -> int:
+        """Remember one roster block as ours, so the next match needs no picker."""
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+        players = [p for p in normalise_players(session.report) if p.get("team") == side]
+        return self.identity.add(room.code, players)
 
     # -- lifecycle -----------------------------------------------------
     @property
@@ -155,13 +189,15 @@ class RoomHub:
             report = {**report, "mySide": existing.report["mySide"]}
         session, created = self.store.upsert_session(report, room_code=room.code)
         self.store.bind(room, session)
-        self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
+        self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         self.persist(session)
         self.jobs.submit_profile(session)
         self.jobs.submit_demo(session)
         return session, created
 
-    def set_analysis_side(self, room: Room, my_side: str | None) -> Session:
+    def set_analysis_side(
+        self, room: Room, my_side: str | None, analyze_all: bool = False
+    ) -> Session:
         """Change which roster we treat as ours and re-run the demo job.
 
         Downloads are cached per player on disk, so switching after the fact
@@ -172,9 +208,10 @@ class RoomHub:
         if session is None:
             raise RoomNotFound(room.code)
         session.report["mySide"] = my_side
+        session.report["analyzeAll"] = bool(analyze_all and my_side is None)
         session.updated_at = time.time()
         self.persist(session)
-        self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
+        self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         if self.jobs.demo_enabled:
             if session.demo_state == "running":
                 self.jobs.cancel(session.id)

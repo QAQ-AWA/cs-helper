@@ -111,7 +111,7 @@ CS_HELPER_HISTORY_DAYS=7           # 历史保留天数，到期连轨迹一起�
 CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
 
 # 测试
-cd server && pytest tests -q    # 102
+cd server && pytest tests -q    # 114
 cd engine && pytest tests -q    # 104 passed, 10 skipped（需 328MB 集成 demo）
 cd desktop && npx vitest run    # 284
 ```
@@ -152,15 +152,33 @@ cd desktop && npx vitest run    # 284
 
 ## 功能深化（本轮）
 
+### 0. 数据到底从哪来（回答"为什么不搬 home-api"）
+
+| 数据 | 来源 | 谁在抓 |
+| --- | --- | --- |
+| 选手赛季数据（Rating/K/D/爆头率/胜率/场次） | 桌面端已打开的 5E 比赛详情接口（`field-mapper.ts` 的 `userData` / `seasonBlock`），随上报带给服务端 | 桌面端 |
+| demo 列表与下载地址 | 5E **公开**接口：`arena/api/search` + `gate` 分页（`engine/api_client.py`） | 引擎 |
+| 轨迹、下包点、道具、死亡 | 自己的 `demoparser2` 解析 | 引擎 |
+
+旧项目 `home-api.ts` 走的是签名网关（HMAC，Rust `gate_sign`），能多拿赛季 ADR/RWS/KAST。没搬的原因：**密钥会随 5E 客户端更新失效**（旧项目自己就写了 `formatP5eHomeEnrichError` 专门提示"签名验证失败"），而它补的是锦上添花字段；证据包已经把缺的指标写进 `dataQuality.missing`，模型不会瞎编。
+
+**副作用要记住**：签名失效时桌面端退回本场 `fight` 数据，`matchesPlayed` 会报 0。`evidence.reliability_for()` 因此把 `<=0` 判成 `unknown` 而不是 `low`——"不知道"和"打得少"是两件事。
+
 ### 1. 我方阵营：只下对面 5 人
 
 下载是唯一瓶颈（单人 130–230MB / ~21s），十人全下就是十份等待，而赛前真正要研究的只有对面。
 
-- `MatchReport.mySide: "ct"|"t"|null`；解析顺序 **显式选择 > `isSelf` 标记 > `partyTag` > 不确定**（不确定就退回十人，绝不猜）。
+- `MatchReport.mySide: "ct"|"t"|null`；解析顺序 **显式选择 > 「都看」覆盖 > ID 库 > `isSelf` > `partyTag` > 不确定**（不确定就退回十人，绝不猜）。
 - `adapters.demo_targets()` 一处过滤，`to_engine_hints` / `demo_job_targets` / 进度总数全部走它。
 - `POST /api/v1/room/{code}/analysis-side` 改边重跑：demo 按 domain 缓存在磁盘，切换只补没下过的人。
 - 手机端「我们在哪边」三档（CT / T / 都看），改完立刻显示目标人数。
 - 重复上报同一局且没带 `mySide` 时，保留已有选择（否则第二台 PC 一上报就白下十人）。
+
+**ID 库（`identity.py`）**：把确认过的 SteamID / 5E domain 记进 `DATA_DIR/identity.json`（按房间码隔离，重启不丢）。下一局上报时先查库，**同一侧命中 ≥2 人且另一侧 0 人**才自动判定——只命中 1 人不够，否则你撞见前队友时会被判到对面去。判不出来就回落到手动选择，这是安全的失败方向。
+
+- `GET /api/v1/identity?roomCode=` 看库；`POST /api/v1/identity/learn {side}` 记住当前对局的某一侧；`DELETE` 清空。
+- 手机端选完边会出现「把我方这 5 人记进 ID 库」，成功后提示「已记住 N 个 ID」。
+- **「都看」必须能压过 ID 库**：`POST analysis-side {mySide:null, all:true}` 会写 `report.analyzeAll=true`，否则库里一命中，用户点的「都看」立刻被打回去，看起来像坏了。
 
 **踩到的坑**：`SubprocessDemoRunner.cancel()` 会把 session 记进 `_cancelled`，紧接着提交的新任务一启动就判自己"已取消" → demo 直接 failed。修法：只在 `demo_state == "running"` 时才 cancel，且 `run()` 启动时丢弃过期的取消标记。
 

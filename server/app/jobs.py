@@ -58,15 +58,24 @@ class JobManager:
         ai_client: AiClient | None = None,
         max_workers: int = 4,
         on_change: Callable[[Session], None] | None = None,
+        side_resolver: Callable[[Session], str | None] | None = None,
     ) -> None:
         self._emit_session = emit_session
         self._artifacts = artifacts
         self._demo_runner = demo_runner
         self._ai_client = ai_client
         self._on_change = on_change
+        self._side_resolver = side_resolver
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job")
         self._futures: set[Future] = set()
         self._lock = Lock()
+
+    def _side(self, session: Session) -> str | None:
+        """Our side as the hub resolves it (explicit pick, ID library, markers)."""
+
+        if self._side_resolver is not None:
+            return self._side_resolver(session)
+        return adapters.resolve_my_side(session.report)
 
     # -- public API ----------------------------------------------------
     @property
@@ -102,8 +111,9 @@ class JobManager:
             if session.demo_state in {"running", "ready"}:
                 return None
             session.demo_state = "running"
-        # Only the opposing five when the report says which side is ours.
-        total = len(adapters.demo_targets(session.report))
+        # Only the opposing five when the report (or the ID library) says which
+        # side is ours.
+        total = len(adapters.demo_targets(session.report, self._side(session)))
         return self.submit("demo", session, self._demo_work, total=max(total, 1))
 
     def cancel(self, session_id: str) -> None:
@@ -193,7 +203,7 @@ class JobManager:
         prompt = build_prompt(
             session.map_name,
             players,
-            adapters.resolve_my_side(session.report),
+            self._side(session),
         )
 
         accumulated = ""
@@ -284,10 +294,10 @@ class JobManager:
             return
 
         request = DemoRequest(
-            usernames=adapters.demo_job_targets(report),
+            usernames=adapters.demo_job_targets(report, self._side(session)),
             map_name=session.map_name,
             max_demos=settings.DEMO_MAX_DEMOS,
-            hints=adapters.to_engine_hints(report),
+            hints=adapters.to_engine_hints(report, self._side(session)),
             output_dir=str(settings.job_dir(session.id)),
             demo_dir=str(settings.DEMO_DIR),
             maps_dir=str(settings.MAPS_DIR),

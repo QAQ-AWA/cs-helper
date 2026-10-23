@@ -61,7 +61,9 @@ def _round(value: float | None, digits: int = 2) -> float | None:
 
 def reliability_for(matches: Any) -> str:
     count = _num(matches)
-    if count is None:
+    # The desktop reports 0 when the season block is missing, which means
+    # "unknown", not "played zero games".
+    if count is None or count <= 0:
         return "unknown"
     for floor, label in RELIABILITY_BANDS:
         if count >= floor:

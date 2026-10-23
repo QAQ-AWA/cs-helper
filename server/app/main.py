@@ -25,15 +25,17 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import devtools, events, settings
-from .adapters import demo_targets
+from .adapters import demo_targets, resolve_side
 from .ai import OpenAiClient, config_from_settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
+from .identity import IdentityStore
 from .models import (
     AnalysisSideRequest,
     DevParseRequest,
+    IdentityLearnRequest,
     MatchReport,
     PostMatchReport,
     RoomCreate,
@@ -100,6 +102,11 @@ def create_app(
     if ai_client == "auto":
         ai_config = config_from_settings()
         ai_client = OpenAiClient(ai_config) if ai_config else None
+    # The ID library lives beside the history so a restart does not forget who
+    # "we" are; without persistence it degrades to in-memory.
+    identity = IdentityStore(
+        (repository.root / "identity.json") if repository is not None else None
+    )
     hub = RoomHub(  # type: ignore[arg-type]
         store,
         tokens,
@@ -110,6 +117,7 @@ def create_app(
         ai_client=ai_client,
         repository=repository,
         history_days=history_days,
+        identity=identity,
     )
     limiter = JoinLimiter()
     if repository is not None:
@@ -355,16 +363,54 @@ def create_app(
 
         room, _member = require_room(authorization, code)
         try:
-            session = hub.set_analysis_side(room, payload.mySide)
+            session = hub.set_analysis_side(room, payload.mySide, payload.all)
         except RoomNotFound:
             raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        side, source = resolve_side(
+            session.report, hub.identity.match(room.code, session.report)
+        )
         return ok(
             {
-                "mySide": session.report.get("mySide"),
+                "mySide": side,
+                "mySideSource": source,
                 "demoState": session.demo_state,
-                "targets": len(demo_targets(session.report)),
+                "targets": len(demo_targets(session.report, side)),
             }
         )
+
+    # -- identity library ----------------------------------------------
+    @app.get("/api/v1/identity")
+    def identity_summary(
+        roomCode: str = Query(..., min_length=1, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        """Which IDs the relay already recognises as ours."""
+
+        room, _member = require_room(authorization, roomCode)
+        return ok(hub.identity.summary(room.code))
+
+    @app.post("/api/v1/identity/learn")
+    def identity_learn(
+        payload: IdentityLearnRequest,
+        roomCode: str = Query(..., min_length=1, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        """Remember one roster block; the next report then needs no picker."""
+
+        room, _member = require_room(authorization, roomCode)
+        try:
+            added = hub.learn_identity(room, payload.side)
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        return ok({"added": added, **hub.identity.summary(room.code)})
+
+    @app.delete("/api/v1/identity")
+    def identity_clear(
+        roomCode: str = Query(..., min_length=1, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        room, _member = require_room(authorization, roomCode)
+        return ok({"removed": hub.identity.clear(room.code)})
 
     @app.post("/api/v1/dev/seed-paths")
     def dev_seed_paths(

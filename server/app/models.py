@@ -166,6 +166,18 @@ class DevParseRequest(BaseModel):
 
 
 class AnalysisSideRequest(BaseModel):
-    """Which roster is ours; ``null`` means "analyze both sides"."""
+    """Which roster is ours; ``null`` means "let the ID library decide".
+
+    ``all=True`` is the explicit "analyze both sides" override: without it a
+    library hit would immediately re-take the side and the "both" choice would
+    look broken to the user.
+    """
 
     mySide: Literal["ct", "t"] | None = None
+    all: bool = False
+
+
+class IdentityLearnRequest(BaseModel):
+    """Remember one roster block as ours, so the next match auto-detects."""
+
+    side: Literal["ct", "t"]

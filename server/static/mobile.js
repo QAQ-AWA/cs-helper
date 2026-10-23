@@ -234,7 +234,7 @@ function renderMatch(match, profile) {
     players.filter((p) => p.team === 'ct').map(playerRow).join('') || '<div class="muted">—</div>';
   $('team-t').innerHTML =
     players.filter((p) => p.team === 't').map(playerRow).join('') || '<div class="muted">—</div>';
-  renderSidePick(match.mySide || '');
+  renderSidePick(match.mySide || '', match.mySideSource || '');
   if (profile) {
     state.profilePlayers = players;
     $('profile-source').textContent = '数据来自队友电脑端上报';
@@ -244,23 +244,49 @@ function renderMatch(match, profile) {
 /* ---------- analysis side ---------- */
 
 /** "我们在哪边" — picking a side halves the demo downloads. */
-function renderSidePick(mySide) {
+function renderSidePick(mySide, source = '') {
   state.mySide = mySide;
   document.querySelectorAll('#side-pick button').forEach((button) => {
     button.classList.toggle('on', button.dataset.side === mySide);
   });
   const hint = $('side-hint');
-  if (mySide) {
-    hint.textContent = `只下载对面 5 人的录像（省一半流量与等待）`;
+  if (source === 'library') {
+    hint.textContent = `已按 ID 库自动判断：我方 ${mySide.toUpperCase()}`;
+  } else if (source === 'explicit-all') {
+    hint.textContent = '已选择分析双方（十人），ID 库暂不生效';
+  } else if (mySide) {
+    hint.textContent = '只下载对面 5 人的录像（省一半流量与等待）';
   } else {
     hint.textContent = '未选择时十个人的录像都会下载，首次等待更久';
+  }
+  // Offer to remember only when we had to ask (or the pick was manual).
+  $('remember-side').classList.toggle('hidden', !mySide || source === 'library');
+}
+
+async function rememberSide() {
+  if (!roomCode || !state.token || !state.mySide) return;
+  try {
+    const res = await fetch(`/api/v1/identity/learn?roomCode=${roomCode}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ side: state.mySide }),
+    });
+    const json = await res.json();
+    if (json.code !== 0) throw new Error(json.message || '保存失败');
+    renderSidePick(state.mySide, 'library');
+    $('side-hint').textContent = `已记住 ${json.data.count} 个 ID，下一局自动判断`;
+  } catch (err) {
+    setConn('warn', String(err.message || err));
   }
 }
 
 async function chooseSide(side) {
   if (!roomCode || !state.token) return;
   const previous = state.mySide;
-  renderSidePick(side);
+  renderSidePick(side, side ? 'explicit' : 'explicit-all');
   try {
     const res = await fetch(`/api/v1/room/${roomCode}/analysis-side`, {
       method: 'POST',
@@ -268,11 +294,12 @@ async function chooseSide(side) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${state.token}`,
       },
-      body: JSON.stringify({ mySide: side || null }),
+      // "都看" must beat the ID library, so it carries an explicit override.
+      body: JSON.stringify({ mySide: side || null, all: !side }),
     });
     const json = await res.json();
     if (json.code !== 0) throw new Error(json.message || '切换失败');
-    renderSidePick(json.data.mySide || '');
+    renderSidePick(json.data.mySide || '', json.data.mySideSource || '');
     $('demo-status').textContent = `分析目标：${json.data.targets} 人`;
   } catch (err) {
     renderSidePick(previous);
@@ -551,6 +578,7 @@ async function boot() {
   document.querySelectorAll('#side-pick button').forEach((button) => {
     button.addEventListener('click', () => chooseSide(button.dataset.side));
   });
+  $('remember-side').addEventListener('click', rememberSide);
   if (!roomCode) {
     setConn('', '缺少房间码');
     showErr('请扫描电脑端二维码，或使用带 ?room=XXXXXX 的链接');
