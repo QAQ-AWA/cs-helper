@@ -13,6 +13,9 @@ def build(username, domain, steamid, map_name, rounds, combat):
             "side": r["side"], "rtype": r["rtype"], "round_id": r["official_num"],
             "path": r["path"], "grenades": r["grenades"],
             "death_t": r.get("death_t"),
+            # Bomb site truth for the round (A/B + plant position), when it was
+            # planted. Opening-position analysis needs this to name sites.
+            "plant": r.get("plant"),
         })
     return {
         "username": username, "domain": domain, "steamid": str(steamid),

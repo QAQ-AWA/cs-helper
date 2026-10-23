@@ -91,6 +91,10 @@ class Session:
     artifact_id: str | None = None
     ai_state: str = "pending"  # pending | running | ready | skipped | failed
     ai_text: str | None = None
+    # Second AI pass: opening habits read off the parsed trajectories.
+    tactics_state: str = "pending"  # pending | running | ready | skipped | failed
+    tactics_text: str | None = None
+    trajectory: dict[str, Any] | None = None
     post_report: dict[str, Any] | None = None
 
     @property
@@ -106,11 +110,14 @@ class Session:
             "teams": self.report.get("teams", {}),
             "phase": self.report.get("phase", "ready"),
             "countdownSeconds": self.report.get("countdownSeconds"),
+            "mySide": self.report.get("mySide"),
             "profileState": self.profile_state,
             "demoState": self.demo_state,
             "artifactId": self.artifact_id,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
+            "tacticsState": self.tactics_state,
+            "tacticsText": self.tactics_text,
             "postReport": self.post_report,
             "createdAt": int(self.created_at * 1000),
             "updatedAt": int(self.updated_at * 1000),
@@ -134,6 +141,9 @@ class Session:
             "artifactId": self.artifact_id,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
+            "tacticsState": self.tactics_state,
+            "tacticsText": self.tactics_text,
+            "trajectory": self.trajectory,
             "postReport": self.post_report,
         }
 
@@ -157,6 +167,9 @@ class Session:
                 artifact_id=(str(data["artifactId"]) if data.get("artifactId") else None),
                 ai_state=str(data.get("aiState") or "pending"),
                 ai_text=data.get("aiText"),
+                tactics_state=str(data.get("tacticsState") or "pending"),
+                tactics_text=data.get("tacticsText"),
+                trajectory=data.get("trajectory"),
                 post_report=data.get("postReport"),
             )
         except (KeyError, TypeError, ValueError):
@@ -164,7 +177,7 @@ class Session:
         if not isinstance(session.report, dict) or not session.report.get("teams"):
             return None
         # A job that was mid-flight when the process died will never finish.
-        for attribute in ("profile_state", "demo_state", "ai_state"):
+        for attribute in ("profile_state", "demo_state", "ai_state", "tactics_state"):
             if getattr(session, attribute) == "running":
                 setattr(session, attribute, "failed")
         return session
@@ -185,6 +198,7 @@ class Session:
             "profileState": self.profile_state,
             "demoState": self.demo_state,
             "aiState": self.ai_state,
+            "tacticsState": self.tactics_state,
             "hasArtifact": bool(self.artifact_id),
             "scoreA": post.get("scoreA"),
             "scoreB": post.get("scoreB"),

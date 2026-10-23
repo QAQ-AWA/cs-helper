@@ -24,6 +24,8 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
   ├─ hub.py ──── 房间编排，唯一分配 seq 的地方（同锁内分配+发布）
   ├─ store.py ── 房间/会话/环形缓冲（内存，重启后从磁盘恢复最近 N 局）
   ├─ persistence.py ── 一局一个 JSON，原子写；历史列表与保留期清理
+  ├─ evidence.py ───── 赛前证据包：本地算 direction/reliability/dataQuality
+  ├─ trajectory.py ─── 开局画像：CT 站位、T 下包分布、道具与开局死亡
   ├─ ws.py ────── 每连接有界队列；重连先补事件、快照最后发
   ├─ jobs.py ──── 画像(秒级) → AI(流式) → Demo 任务；按 platform:matchId 全局去重
   ├─ engine_runner.py ── 子进程管理（见"为什么跑子进程"）
@@ -58,7 +60,8 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
 | `ac2437c` | AI 适配 DeepSeek 推理模型 + 本地 .dem 直通解析接口 |
 | `d300c35` | **默认每人只下 1 个 Demo**（原 6 会下 4-5GB 跑不完）；轨迹 K/D 标注"该场" |
 | `6929899` | 交接文档 |
-| *本轮* | **P5 运维**：会话与轨迹落盘、启动恢复、MAIN 自动重绑、后台回收、历史接口 |
+| `e2d4f42` | **P5 运维**：会话与轨迹落盘、启动恢复、MAIN 自动重绑、后台回收、历史接口 |
+| *本轮* | **功能深化**：我方阵营选择（只下对面 5 人）、证据化 AI 输入、轨迹开局预判 |
 
 ## 关键决策及依据（都有实测，别凭感觉推翻）
 
@@ -108,7 +111,7 @@ CS_HELPER_HISTORY_DAYS=7           # 历史保留天数，到期连轨迹一起�
 CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
 
 # 测试
-cd server && pytest tests -q    # 77
+cd server && pytest tests -q    # 102
 cd engine && pytest tests -q    # 104 passed, 10 skipped（需 328MB 集成 demo）
 cd desktop && npx vitest run    # 284
 ```
@@ -147,17 +150,59 @@ cd desktop && npx vitest run    # 284
 
 **实测（真实 5E 四人一局）**：4 人 mirage 轨迹 20/13/13/16 回合，产物 635KB；session JSON 2.5KB。`kill` 后重启 → `restored 1 match(es)` → 重进 MAIN 快照直接有 match + artifactId，索引与单人分片均 200；`lastReap` 每 15s 前进一次（GC_INTERVAL=15 时）。
 
+## 功能深化（本轮）
+
+### 1. 我方阵营：只下对面 5 人
+
+下载是唯一瓶颈（单人 130–230MB / ~21s），十人全下就是十份等待，而赛前真正要研究的只有对面。
+
+- `MatchReport.mySide: "ct"|"t"|null`；解析顺序 **显式选择 > `isSelf` 标记 > `partyTag` > 不确定**（不确定就退回十人，绝不猜）。
+- `adapters.demo_targets()` 一处过滤，`to_engine_hints` / `demo_job_targets` / 进度总数全部走它。
+- `POST /api/v1/room/{code}/analysis-side` 改边重跑：demo 按 domain 缓存在磁盘，切换只补没下过的人。
+- 手机端「我们在哪边」三档（CT / T / 都看），改完立刻显示目标人数。
+- 重复上报同一局且没带 `mySide` 时，保留已有选择（否则第二台 PC 一上报就白下十人）。
+
+**踩到的坑**：`SubprocessDemoRunner.cancel()` 会把 session 记进 `_cancelled`，紧接着提交的新任务一启动就判自己"已取消" → demo 直接 failed。修法：只在 `demo_state == "running"` 时才 cancel，且 `run()` 启动时丢弃过期的取消标记。
+
+### 2. AI 输入改成证据包（学旧项目 analysis-v3）
+
+旧项目 `src/core/ai/analysis-v3.ts` 的核心不是提示词写得多好，而是**判断在本地做完了**：方向按全场中位数算、可信度按样本量分级、模型只能引用证据 ID。我们原来只给一张十人 Rating 表，等于让模型自己瞎猜强弱。
+
+- 新增 `server/app/evidence.py`：`direction`（positive/negative/neutral，按全场中位数 ± 容差）、`reliability`（high ≥30 场 / medium ≥10 / low）、`dataQuality`（哪些指标有、哪些缺、谁样本不足）、`mapFit`（每张图的性格）、`role`（我方/对方）。
+- 提示词硬规则：只能引用包里的数值、不得推翻 direction、low/unknown 只能写进「数据缺口」。输出仍是 Markdown（手机已能渲染），不改成 JSON，省掉一次 UI 重写。
+- 保留了旧项目的 `MAP_FIT_HINTS` 与指标基准线（Rating 1.00 / K/D 1.00 / 爆头率 45–55% / 胜率 50%）。
+
+### 3. 轨迹开局预判（第二段 AI）
+
+- **引擎**：`parse.py` 新增 `parse_plants()`，从 `bomb_planted` 取包点编号 + 下包人坐标，按 tick 落到回合，写进每回合的 `plant: {site, x, y, t, by}`；`player_json` 透传；按 demo 路径 + mtime 缓存，第二个玩家起零成本（+0.2s/人）。
+- **包点真值**：`site` 326 = A、327 = B，在 mirage 上用雷达变换核对过（A 落在右下 530–595/740–777，B 落在左上 208–262/253–294）。这是**唯一**的 A/B 来源，没有包点数据时一律 `unknown`，不猜。
+- **画像**：`server/app/trajectory.py` 把每人的 CT 8 秒站位（A/B/offsite）、T 边下包分布（A/B）、平均下包时间、开局 25 秒内死亡数、12 秒内道具统计成 JSON；包点锚点按地图累积在 `DATA_DIR/anchors.json`（单场 demo 常常只打一边，靠多场补齐）。
+- **第二段 AI**：`TACTICAL_PATHS_READY` 之后链式 `submit_tactics`，事件 `AI_TACTICS_CHUNK` / `AI_TACTICS_READY`，手机新增「开局预判」卡片；`tacticsState/tacticsText/trajectory` 一起落盘。
+
+**关键实测修正**：原本想用「20 秒时站在哪」判断 T 边打哪，实测**不成立**——demo 只截取开局 20 秒，而 mirage 的下包时间实测 31–42 秒（四人 62 回合的 avgPlantT 39.8–50.1s）。所以 T 边选点一律用下包真值，位置快照只用于 CT 站位。这条如果没跑真实数据会一直错下去。
+
+真实四人一局的结果（可直接当验收样例）：
+
+| 玩家 | CT 8s 站位 | T 下包分布 | 平均下包 | 开局死亡 | 早期道具 |
+| --- | --- | --- | --- | --- | --- |
+| 背身步马枪 | A 1 | **A 7 / B 4** | 39.8s | 1 | 烟2 闪1 火4 |
+| 半团空气 | A 2 / B 3 / 外场 5 | A 1 / B 3 | 44.2s | 3 | 烟1 闪2 火2 |
+| Z大爷 | 外场 1 | A 1 / B 3 | 50.1s | 3 | 闪3 火6 雷1 烟2 |
+| Farewell-海海 | A 2 / 外场 6 | A 1 / B 2 | 47.9s | 1 | 烟3 闪1 |
+
 ## 未做 / 待验证
 
-- **历史习惯聚合**：现在是单场轨迹回放；"习惯"应聚合对手多场 demo（数据已能拉，缺聚合视图与文案）。历史接口已经就绪。
-- **按房间配额 / Redis 化**：单机单房间够用，未做；"重启即丢"这条硬阻塞已由持久化解决。
+- **开局预判未接真实模型**：本轮环境没有 `CS_HELPER_AI_KEY`，只验证了提示词结构与真实画像数据，`tacticsState` 落在 `skipped`。接上 key 后应能看到 400 字左右的四段输出。
+- **`mySide` 桌面端未上报**：桌面端目前既没有 `isSelf` 也没有 `partyTag`，所以只能靠手机端手动选；后续可在桌面端读本机 SteamID 自动填。
+- **包点映射只验证了 mirage**：326/327 的 A/B 约定按 CS2 实体顺序推断，其他图若出现反向需在 `parse.BOMBSITE_LABELS` 按图覆盖。
+- **历史习惯聚合**：现在是单场轨迹回放 + 单场开局画像；跨场聚合（同一对手多场叠加）还没做。
 - 真机视觉：手机渲染逻辑有无头断言保证不崩，但配色/缩放/手感未做真机走查。
-- 桌面端 AI 面板未订阅服务端 `phase:"thinking"`（ thinking 事件被安全忽略）。
-- `desktop/.github` 已删，CI 统一在仓库根；旧 `cs-helper-exe` 仓库未同步桌面端新改动（report-builder/sync-client）。
+- 桌面端 AI 面板未订阅 `phase:"thinking"`，也没订阅新的 `AI_TACTICS_*`。
 - 328MB 集成 demo 缺失，engine 有 10 个用例 skip。
 
 ## 建议下一步
 
-1. 习惯聚合视图：多人多场 demo 的点位热力/开局路线对比（`/api/v1/history/sessions` 已是数据入口）。
-2. 发布桌面端：latest-build 已可用，打 `v1.0.0` 发正式版并更新根 README 下载链接。
-3. 真机走查手机端轨迹页（唯一没有视觉验证的页面）。
+1. 接真实 key 跑一次开局预判，校准提示词（这是本轮唯一没闭环的环节）。
+2. 跨场聚合：同一对手多场 demo 的包点分布叠加，`/api/v1/history/sessions` 已是入口。
+3. 发布桌面端：latest-build 已可用，打 `v1.0.0` 发正式版并更新根 README 下载链接。
+4. 真机走查手机端轨迹页与新的「开局预判」卡片。

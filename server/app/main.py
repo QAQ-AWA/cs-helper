@@ -25,12 +25,20 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import devtools, events, settings
+from .adapters import demo_targets
 from .ai import OpenAiClient, config_from_settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
-from .models import DevParseRequest, MatchReport, PostMatchReport, RoomCreate, RoomJoin
+from .models import (
+    AnalysisSideRequest,
+    DevParseRequest,
+    MatchReport,
+    PostMatchReport,
+    RoomCreate,
+    RoomJoin,
+)
 from .persistence import SessionRepository
 from .security import JoinLimiter, TokenService, lan_addresses
 from .store import Store
@@ -336,6 +344,27 @@ def create_app(
         except RoomNotFound:
             raise ApiError("房间里还没有对局，无法归档战报", code=1009, status=409) from None
         return ok({"stored": True, "matchCode": payload.matchCode})
+
+    @app.post("/api/v1/room/{code}/analysis-side")
+    def set_analysis_side(
+        code: str,
+        payload: AnalysisSideRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        """Pick our roster so only the opposing five get downloaded."""
+
+        room, _member = require_room(authorization, code)
+        try:
+            session = hub.set_analysis_side(room, payload.mySide)
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        return ok(
+            {
+                "mySide": session.report.get("mySide"),
+                "demoState": session.demo_state,
+                "targets": len(demo_targets(session.report)),
+            }
+        )
 
     @app.post("/api/v1/dev/seed-paths")
     def dev_seed_paths(

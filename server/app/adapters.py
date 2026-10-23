@@ -42,6 +42,52 @@ def build_profile_payload(session_id: str, report: dict[str, Any]) -> dict[str, 
     }
 
 
+def resolve_my_side(report: dict[str, Any]) -> str | None:
+    """Which roster block is ours, or ``None`` when the report cannot say.
+
+    Three signals, strongest first: an explicit choice, the client marking the
+    local player, and a party tag on one side. Anything ambiguous returns
+    ``None`` so we fall back to analysing all ten rather than guessing wrong.
+    """
+
+    explicit = report.get("mySide")
+    if explicit in ("ct", "t"):
+        return explicit
+
+    teams = report.get("teams") or {}
+    for side in ("ct", "t"):
+        if any(player.get("isSelf") for player in teams.get(side) or []):
+            return side
+    for side in ("ct", "t"):
+        if any(player.get("partyTag") for player in teams.get(side) or []):
+            return side
+    return None
+
+
+def opponent_side(side: str | None) -> str | None:
+    if side == "ct":
+        return "t"
+    if side == "t":
+        return "ct"
+    return None
+
+
+def demo_targets(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Players whose demos we actually need.
+
+    With a known side this is the opposing five: half the downloads, half the
+    wait, and the only side whose habits matter before the match.
+    """
+
+    players = normalise_players(report)
+    my_side = resolve_my_side(report)
+    if my_side is None:
+        return players
+    opponents = [player for player in players if player["team"] != my_side]
+    # A lopsided report (only our side filled in) must not silently skip the job.
+    return opponents or players
+
+
 def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
     """Build ``player_hints`` for ``pipeline.run``.
 
@@ -54,7 +100,7 @@ def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
         return None
 
     hints: list[dict[str, str]] = []
-    for player in normalise_players(report):
+    for player in demo_targets(report):
         nickname = (player.get("nickname") or "").strip()
         domain = (player.get("platformUserId") or "").strip()
         steam_id = (player.get("steamId") or "").strip()
@@ -67,7 +113,7 @@ def to_engine_hints(report: dict[str, Any]) -> list[dict[str, str]] | None:
 def demo_job_targets(report: dict[str, Any]) -> list[str]:
     """Nicknames handed to the engine, in the same order as ``to_engine_hints``."""
 
-    return [player["nickname"] for player in normalise_players(report)]
+    return [player["nickname"] for player in demo_targets(report)]
 
 
 def nickname_index(report: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:

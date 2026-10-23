@@ -100,6 +100,9 @@ class SubprocessDemoRunner:
 
         proc = self._spawn(payload)
         with self._lock:
+            # A cancel that arrived before the child existed is stale: the caller
+            # cancels only to restart, so honouring it here would fail the new run.
+            self._cancelled.discard(key)
             self._procs[key] = proc
         try:
             return self._consume(proc, key, request, on_progress)

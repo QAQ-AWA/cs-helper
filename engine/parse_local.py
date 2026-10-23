@@ -67,6 +67,7 @@ def main() -> int:
             )
         )
         round_table = parse.get_round_table(events)
+        plants = parse.parse_plants(parser, round_table, demo_path=demo_path)
     except Exception as exc:  # noqa: BLE001 - report, never crash the parent
         _emit({"type": "error", "message": f"cannot open demo: {exc}"})
         return 1
@@ -97,6 +98,7 @@ def main() -> int:
                     "path": row["path"],
                     "grenades": nades.get(row["official_num"], []),
                     "death_t": deaths.get(row["official_num"]),
+                    "plant": plants.get(row["official_num"]),
                 }
                 for row in positions
             ]

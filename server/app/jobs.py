@@ -21,11 +21,12 @@ from threading import Lock
 from typing import Any, Callable, Iterator, Protocol
 
 from . import adapters, settings
-from .ai import build_prompt
+from .ai import TACTICS_SYSTEM_PROMPT, build_prompt, build_tactics_prompt
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
 from .events import Action
 from .store import Session
+from .trajectory import build_profile
 
 log = logging.getLogger("cs-helper.jobs")
 
@@ -68,6 +69,10 @@ class JobManager:
         self._lock = Lock()
 
     # -- public API ----------------------------------------------------
+    @property
+    def demo_enabled(self) -> bool:
+        return self._demo_runner is not None
+
     def submit(
         self,
         kind: str,
@@ -97,8 +102,8 @@ class JobManager:
             if session.demo_state in {"running", "ready"}:
                 return None
             session.demo_state = "running"
-        players = session.report.get("teams") or {}
-        total = len(players.get("ct") or []) + len(players.get("t") or [])
+        # Only the opposing five when the report says which side is ours.
+        total = len(adapters.demo_targets(session.report))
         return self.submit("demo", session, self._demo_work, total=max(total, 1))
 
     def cancel(self, session_id: str) -> None:
@@ -185,7 +190,11 @@ class JobManager:
     def _ai_work(self, session: Session) -> None:
         assert self._ai_client is not None
         players = session.profiles or adapters.normalise_players(session.report)
-        prompt = build_prompt(session.map_name, players)
+        prompt = build_prompt(
+            session.map_name,
+            players,
+            adapters.resolve_my_side(session.report),
+        )
 
         accumulated = ""
         last_emit = 0.0
@@ -428,4 +437,89 @@ class JobManager:
                 "failed": outcome.failed,
                 "bytes": artifact.size,
             },
+        )
+        # Opening habits can only be read once the paths exist, so the tactics
+        # pass chains here rather than running next to the profile analysis.
+        session.trajectory = build_profile(session.map_name, outcome.players)
+        self.submit_tactics(session)
+
+    # -- tactics (second AI pass) --------------------------------------
+    def submit_tactics(self, session: Session) -> Future | None:
+        if self._ai_client is None:
+            if session.tactics_state == "pending":
+                session.tactics_state = "skipped"
+            return None
+        if not (session.trajectory or {}).get("players"):
+            if session.tactics_state == "pending":
+                session.tactics_state = "skipped"
+            return None
+        with self._lock:
+            if session.tactics_state in {"running", "ready"}:
+                return None
+            session.tactics_state = "running"
+        return self.submit("tactics", session, self._tactics_work)
+
+    def _tactics_work(self, session: Session) -> None:
+        assert self._ai_client is not None
+        assert session.trajectory is not None
+        prompt = build_tactics_prompt(session.trajectory)
+
+        accumulated = ""
+        last_emit = 0.0
+        reason_chars = 0
+        last_reason_emit = 0.0
+
+        def on_reason(text: str) -> None:
+            nonlocal reason_chars, last_reason_emit
+            reason_chars += len(text)
+            now = time.monotonic()
+            if now - last_reason_emit >= THINKING_EMIT_INTERVAL:
+                last_reason_emit = now
+                self._emit_session(
+                    session,
+                    Action.AI_TACTICS_CHUNK,
+                    {"sessionId": session.id, "phase": "thinking", "chars": reason_chars},
+                )
+
+        for chunk in self._ai_client.stream(
+            prompt, on_reason=on_reason, system=TACTICS_SYSTEM_PROMPT
+        ):
+            if not chunk:
+                continue
+            accumulated += chunk
+            now = time.monotonic()
+            if now - last_emit >= STREAM_EMIT_INTERVAL:
+                last_emit = now
+                self._emit_session(
+                    session,
+                    Action.AI_TACTICS_CHUNK,
+                    {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
+                )
+
+        if not accumulated.strip():
+            session.tactics_state = "failed"
+            self._emit_session(
+                session,
+                Action.ROOM_ERROR,
+                {
+                    "code": 2005,
+                    "message": "开局预判没有正文输出，可调大 CS_HELPER_AI_MAX_TOKENS",
+                    "retryable": True,
+                    "stage": "tactics",
+                    "detail": f"推理 {reason_chars} 字" if reason_chars else None,
+                },
+            )
+            return
+
+        session.tactics_text = accumulated
+        session.tactics_state = "ready"
+        self._emit_session(
+            session,
+            Action.AI_TACTICS_CHUNK,
+            {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
+        )
+        self._emit_session(
+            session,
+            Action.AI_TACTICS_READY,
+            {"sessionId": session.id, "report": accumulated, "model": settings.AI_MODEL},
         )

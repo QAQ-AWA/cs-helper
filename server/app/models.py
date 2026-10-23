@@ -76,6 +76,10 @@ class MatchReport(BaseModel):
     mapName: str
     phase: str = Field(default="ready", max_length=24)
     countdownSeconds: int | None = Field(default=None, ge=0, le=3600)
+    # Which roster block is ours. When known, only the *other* five players'
+    # demos are downloaded — the download, not the parse, is the bottleneck.
+    # ``None`` means "analyze everyone", which is the old behaviour.
+    mySide: Literal["ct", "t"] | None = None
     reporter: dict | None = None
     teams: TeamPayload = Field(default_factory=TeamPayload)
     demoHints: list[dict] = Field(default_factory=list)
@@ -159,3 +163,9 @@ class DevParseRequest(BaseModel):
     """Dev-only: parse a local .dem by file name (no path traversal)."""
 
     name: str = Field(min_length=5, max_length=200)
+
+
+class AnalysisSideRequest(BaseModel):
+    """Which roster is ours; ``null`` means "analyze both sides"."""
+
+    mySide: Literal["ct", "t"] | None = None

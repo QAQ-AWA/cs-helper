@@ -143,6 +143,16 @@ class RoomHub:
 
     # -- match ---------------------------------------------------------
     def report_match(self, room: Room, report: dict[str, Any]) -> tuple[Session, bool]:
+        existing = self.store.get_session(room.session_id) if room.session_id else None
+        if (
+            existing is not None
+            and existing.match_id == report.get("matchId")
+            and not report.get("mySide")
+            and existing.report.get("mySide")
+        ):
+            # A second PC re-reporting the same match must not wipe the side
+            # someone already picked; that would silently re-download all ten.
+            report = {**report, "mySide": existing.report["mySide"]}
         session, created = self.store.upsert_session(report, room_code=room.code)
         self.store.bind(room, session)
         self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
@@ -150,6 +160,27 @@ class RoomHub:
         self.jobs.submit_profile(session)
         self.jobs.submit_demo(session)
         return session, created
+
+    def set_analysis_side(self, room: Room, my_side: str | None) -> Session:
+        """Change which roster we treat as ours and re-run the demo job.
+
+        Downloads are cached per player on disk, so switching after the fact
+        only pays for players never fetched before.
+        """
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+        session.report["mySide"] = my_side
+        session.updated_at = time.time()
+        self.persist(session)
+        self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
+        if self.jobs.demo_enabled:
+            if session.demo_state == "running":
+                self.jobs.cancel(session.id)
+            session.demo_state = "pending"
+            self.jobs.submit_demo(session)
+        return session
 
     def report_post_match(self, room: Room, report: dict[str, Any]) -> Session:
         """赛后面板的数据由客户端取回，服务端只负责归档与广播。"""
@@ -325,6 +356,7 @@ class RoomHub:
         )
         session.artifact_id = artifact.id
         session.demo_state = "ready"
+        session.trajectory = self._profile_from_parts(bundle, parts)
         self.persist(session)
         self.emit_session(
             session,
@@ -338,4 +370,26 @@ class RoomHub:
                 "synthetic": False,
             },
         )
+        self.jobs.submit_tactics(session)
         return artifact, bundle
+
+    @staticmethod
+    def _profile_from_parts(bundle: dict[str, Any], parts: dict[str, bytes]) -> dict[str, Any]:
+        """Opening habits for the dev path, which has no engine outcome object."""
+
+        from .trajectory import build_profile
+
+        players = []
+        for steam_id, body in parts.items():
+            try:
+                payload = json.loads(body)
+            except (ValueError, TypeError):
+                continue
+            players.append(
+                {
+                    "steamId": steam_id,
+                    "nickname": payload.get("nickname"),
+                    "replay": payload.get("replay"),
+                }
+            )
+        return build_profile(bundle.get("map") or "", players)

@@ -13,6 +13,7 @@ const state = {
   ws: null,
   retry: 0,
   match: null,
+  mySide: '',
   paths: null,
   artifactId: null,
   replayCache: new Map(),
@@ -111,6 +112,7 @@ function handle(action, payload) {
         const roster = payload.profiles && payload.profiles.length ? { players: payload.profiles } : null;
         renderMatch(payload.match, roster);
         if (payload.match.aiText) showAi(payload.match.aiText);
+        if (payload.match.tacticsText) showTactics(payload.match.tacticsText);
         if (payload.match.postReport) renderPostMatch(payload.match.postReport);
         if (payload.match.artifactId && !state.paths) loadPaths(payload.match.artifactId);
         else if (state.paths) renderPaths(state.paths);
@@ -122,6 +124,7 @@ function handle(action, payload) {
     case 'MATCH_DETECTED':
       renderMatch(payload);
       if (payload.aiText) showAi(payload.aiText);
+      if (payload.tacticsText) showTactics(payload.tacticsText);
       if (payload.postReport) renderPostMatch(payload.postReport);
       break;
     case 'POST_MATCH_READY':
@@ -149,6 +152,19 @@ function handle(action, payload) {
     case 'AI_REPORT_READY':
       if (typeof payload.report === 'string') showAi(payload.report);
       break;
+    case 'AI_TACTICS_CHUNK':
+      $('tactics-card').classList.remove('hidden');
+      if (payload.phase === 'thinking') {
+        $('tactics').classList.add('thinking');
+        $('tactics').textContent = `AI 正在读对面的开局轨迹…${payload.chars ? `（${payload.chars} 字）` : ''}`;
+      } else {
+        $('tactics').classList.remove('thinking');
+        renderMarkdown(payload.accumulated || '', $('tactics'));
+      }
+      break;
+    case 'AI_TACTICS_READY':
+      if (typeof payload.report === 'string') showTactics(payload.report);
+      break;
     case 'ROOM_ERROR':
       setConn('warn', payload.message || '服务端异常');
       $('demo-status').textContent = payload.message || '';
@@ -157,8 +173,7 @@ function handle(action, payload) {
 }
 
 /** Minimal Markdown: the model emits `##` headings, `**bold**` and `-` lists. */
-function renderAiText(text) {
-  const box = $('ai');
+function renderMarkdown(text, box) {
   if (!text) {
     box.textContent = '';
     return;
@@ -172,10 +187,20 @@ function renderAiText(text) {
   box.innerHTML = html;
 }
 
+function renderAiText(text) {
+  renderMarkdown(text, $('ai'));
+}
+
 function showAi(text) {
   $('ai-card').classList.remove('hidden');
   $('ai').classList.remove('thinking');
   renderAiText(text);
+}
+
+function showTactics(text) {
+  $('tactics-card').classList.remove('hidden');
+  $('tactics').classList.remove('thinking');
+  renderMarkdown(text, $('tactics'));
 }
 
 /* ---------- room view ---------- */
@@ -209,9 +234,49 @@ function renderMatch(match, profile) {
     players.filter((p) => p.team === 'ct').map(playerRow).join('') || '<div class="muted">—</div>';
   $('team-t').innerHTML =
     players.filter((p) => p.team === 't').map(playerRow).join('') || '<div class="muted">—</div>';
+  renderSidePick(match.mySide || '');
   if (profile) {
     state.profilePlayers = players;
     $('profile-source').textContent = '数据来自队友电脑端上报';
+  }
+}
+
+/* ---------- analysis side ---------- */
+
+/** "我们在哪边" — picking a side halves the demo downloads. */
+function renderSidePick(mySide) {
+  state.mySide = mySide;
+  document.querySelectorAll('#side-pick button').forEach((button) => {
+    button.classList.toggle('on', button.dataset.side === mySide);
+  });
+  const hint = $('side-hint');
+  if (mySide) {
+    hint.textContent = `只下载对面 5 人的录像（省一半流量与等待）`;
+  } else {
+    hint.textContent = '未选择时十个人的录像都会下载，首次等待更久';
+  }
+}
+
+async function chooseSide(side) {
+  if (!roomCode || !state.token) return;
+  const previous = state.mySide;
+  renderSidePick(side);
+  try {
+    const res = await fetch(`/api/v1/room/${roomCode}/analysis-side`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ mySide: side || null }),
+    });
+    const json = await res.json();
+    if (json.code !== 0) throw new Error(json.message || '切换失败');
+    renderSidePick(json.data.mySide || '');
+    $('demo-status').textContent = `分析目标：${json.data.targets} 人`;
+  } catch (err) {
+    renderSidePick(previous);
+    setConn('warn', String(err.message || err));
   }
 }
 
@@ -483,6 +548,9 @@ async function boot() {
   }
 
   $('code').textContent = roomCode || '----';
+  document.querySelectorAll('#side-pick button').forEach((button) => {
+    button.addEventListener('click', () => chooseSide(button.dataset.side));
+  });
   if (!roomCode) {
     setConn('', '缺少房间码');
     showErr('请扫描电脑端二维码，或使用带 ?room=XXXXXX 的链接');

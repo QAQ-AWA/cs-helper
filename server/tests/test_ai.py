@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from conftest import make_report
 from app.ai import build_prompt, iter_sse_deltas, iter_sse_events
+from app.engine_runner import DemoOutcome
 from app.main import create_app
 
 
@@ -13,9 +14,11 @@ class FakeAi:
         self.chunks = chunks
         self.reasons = reasons
         self.prompts: list[str] = []
+        self.systems: list[str | None] = []
 
-    def stream(self, prompt, on_reason=None):
+    def stream(self, prompt, on_reason=None, system=None):
         self.prompts.append(prompt)
+        self.systems.append(system)
         for thought in self.reasons:
             if on_reason is not None:
                 on_reason(thought)
@@ -115,6 +118,22 @@ def test_prompt_carries_map_and_rosters():
     assert "CT" in prompt and "T" in prompt
 
 
+def test_prompt_is_an_evidence_pack_with_local_directions():
+    prompt = build_prompt(
+        "de_mirage",
+        [
+            {"nickname": "Alpha", "team": "ct", "stats": {"rating": 1.18, "kd": 1.25, "matchesPlayed": 120}},
+            {"nickname": "Bravo", "team": "t", "stats": {"rating": 0.95, "kd": 0.8, "matchesPlayed": 4}},
+        ],
+        my_side="ct",
+    )
+    assert '"direction":"positive"' in prompt
+    assert '"direction":"negative"' in prompt
+    assert '"role":"我方"' in prompt and '"role":"对方"' in prompt
+    assert '"lowSamplePlayers":["Bravo"]' in prompt
+    assert "数据缺口" in prompt
+
+
 def test_sse_parser_tolerates_noise_and_stops_on_done():
     lines = [
         "",
@@ -170,3 +189,79 @@ def test_sse_events_separate_reasoning_from_content():
     ]
     events = list(iter_sse_events(lines))
     assert events == [("reason", "想一下"), ("content", "结论")]
+
+
+class TacticsRunner:
+    """One demo, five opponents, with real plants so sites can be named."""
+
+    def __init__(self):
+        self.calls = []
+
+    def run(self, request, on_progress, *, session_id=None):
+        self.calls.append(request)
+        players = []
+        for index in range(5):
+            players.append(
+                {
+                    "username": f"opp{index}",
+                    "steamId": f"7656119800000000{index}",
+                    "rounds": 2,
+                    "replay": {
+                        "rounds": [
+                            {
+                                "side": "T",
+                                "path": [[0, 0, 0], [10, 1000, 1000], [20, 1000, 1000]],
+                                "plant": {"site": "A", "x": 1000, "y": 1000},
+                            },
+                            {
+                                "side": "CT",
+                                "path": [[0, -1000, -1000], [20, -1000, -1000]],
+                            },
+                        ]
+                    },
+                }
+            )
+        return DemoOutcome(players=players, failed=[])
+
+    def cancel(self, session_id):
+        return None
+
+
+def test_tactics_pass_runs_after_the_trajectory_is_ready(tmp_path, monkeypatch):
+    from app import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "maps_ready", lambda name: True)
+    monkeypatch.setattr(app_settings, "job_dir", lambda session_id: tmp_path / session_id)
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path / "data")
+
+    ai = FakeAi(chunks=("## 开局选点预判\n3 人 12 秒进 A。",))
+    app = create_app(
+        secret="test-secret",
+        demo_runner=TacticsRunner(),
+        room_mode="single",
+        ai_client=ai,
+    )
+    with TestClient(app) as client:
+        host = client.post("/api/v1/room/create", json={"creatorNickname": "房主"}).json()["data"]
+        client.post(
+            "/api/v1/match/report?roomCode=MAIN",
+            json=make_report(mySide="ct"),
+            headers={"Authorization": f"Bearer {host['token']}"},
+        )
+        deadline = time.time() + 8
+        state = None
+        while time.time() < deadline:
+            snapshot = client.get(
+                "/api/v1/room/MAIN/snapshot", headers={"Authorization": f"Bearer {host['token']}"}
+            ).json()["data"]
+            state = (snapshot["match"] or {}).get("tacticsState")
+            if state in {"ready", "failed", "skipped"}:
+                break
+            time.sleep(0.02)
+
+    assert state == "ready"
+    # Two calls: the season-stats read, then the trajectory read.
+    assert len(ai.systems) == 2
+    assert "开局预判" in ai.systems[1]
+    assert '"planted"' in ai.prompts[1]
+    assert '"siteKnown":["A"]' in ai.prompts[1]

@@ -30,6 +30,15 @@
       <div class="team ct"><h3>CT</h3><div id="team-ct"></div></div>
       <div class="team t"><h3>T</h3><div id="team-t"></div></div>
     </div>
+    <div class="side-pick">
+      <span class="muted">我们在哪边</span>
+      <div class="seg" id="side-pick">
+        <button type="button" data-side="ct">CT</button>
+        <button type="button" data-side="t">T</button>
+        <button type="button" data-side="">都看</button>
+      </div>
+    </div>
+    <div class="muted" id="side-hint"></div>
     <div class="muted" id="profile-source" style="margin-top:8px"></div>
   </section>
 
@@ -49,6 +58,11 @@
   <section class="card hidden" id="ai-card">
     <h2>AI 战术分析</h2>
     <div id="ai"></div>
+  </section>
+
+  <section class="card hidden" id="tactics-card">
+    <h2>开局预判</h2>
+    <div id="tactics"></div>
   </section>
 
   <section class="card">

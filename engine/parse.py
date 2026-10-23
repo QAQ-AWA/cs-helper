@@ -1,11 +1,23 @@
 """Demo parsing for 2.0 replay: round table, side+economy classification,
-position sampling, grenade extraction."""
+position sampling, grenade extraction, bomb plants."""
 import logging
+import os
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
 import config
 
 log = logging.getLogger("parse")
+
+# ``bomb_planted.site`` is the bombsite entity index. Verified on de_mirage
+# against the radar transform: 326 lands on A (bottom-right), 327 on B
+# (top-left). Entity indices are per-map, so this is the one assumption to
+# re-check if a map ever reports sites backwards.
+BOMBSITE_LABELS = {326: "A", 327: "B"}
+
+_PLANT_CACHE: "OrderedDict[tuple[str, float], dict]" = OrderedDict()
+_PLANT_CACHE_MAX = 8
 
 
 def _event_ticks(evts, event_name):
@@ -251,6 +263,92 @@ def parse_deaths_for_rounds(evts, classified, target_steamid):
             out[r["official_num"]] = round((int(d["tick"].min()) - lo) / config.TICK_RATE, 3)
     return out
 
+def _round_for_tick(rounds, tick):
+    """Official round number containing ``tick``, or None outside any round."""
+    for r in rounds:
+        if r["fe_tick"] <= tick <= r["end_tick"]:
+            return r["official_num"]
+    return None
+
+
+def parse_plants(parser, rounds, demo_path=None):
+    """Bomb plants per official round: site letter, position, time from freeze.
+
+    This is the only ground truth we have for "which site did they actually
+    hit" — the per-player paths alone cannot tell A from B. Cheap after the
+    parser is warm (~0.2s), and cached per demo because the same file is parsed
+    once per player.
+    """
+    key = None
+    if demo_path:
+        try:
+            key = (str(demo_path), os.path.getmtime(demo_path))
+        except OSError:
+            key = None
+    if key is not None and key in _PLANT_CACHE:
+        _PLANT_CACHE.move_to_end(key)
+        return _PLANT_CACHE[key]
+
+    result = _parse_plants_uncached(parser, rounds)
+    if key is not None:
+        _PLANT_CACHE[key] = result
+        while len(_PLANT_CACHE) > _PLANT_CACHE_MAX:
+            _PLANT_CACHE.popitem(last=False)
+    return result
+
+
+def _parse_plants_uncached(parser, rounds):
+    if not rounds:
+        return {}
+    try:
+        parsed = parser.parse_events(["bomb_planted"])
+    except Exception as exc:  # noqa: BLE001 - a missing event must not fail the parse
+        log.debug("bomb_planted unavailable: %s", exc)
+        return {}
+    if not parsed:
+        return {}
+    df = parsed[0][1] if isinstance(parsed[0], tuple) else parsed[0]
+    if df is None or not len(df) or "tick" not in getattr(df, "columns", []):
+        return {}
+
+    ticks = sorted({
+        int(value)
+        for value in pd.to_numeric(df["tick"], errors="coerce").dropna()
+    })
+    positions = {}
+    if ticks:
+        try:
+            rows = parser.parse_ticks(["X", "Y", "steamid"], ticks=ticks)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("plant positions unavailable: %s", exc)
+            rows = None
+        if rows is not None and len(rows):
+            for _, row in rows.iterrows():
+                positions[(int(row["tick"]), str(row["steamid"]))] = (
+                    float(row["X"]),
+                    float(row["Y"]),
+                )
+
+    plants = {}
+    for _, plant in df.iterrows():
+        tick = int(plant["tick"])
+        official_num = _round_for_tick(rounds, tick)
+        if official_num is None:
+            continue
+        raw_site = plant.get("site")
+        site = BOMBSITE_LABELS.get(int(raw_site)) if pd.notna(raw_site) else None
+        position = positions.get((tick, str(plant.get("user_steamid"))))
+        freeze = next(r["fe_tick"] for r in rounds if r["official_num"] == official_num)
+        plants[official_num] = {
+            "site": site,
+            "x": round(position[0], 1) if position else None,
+            "y": round(position[1], 1) if position else None,
+            "t": round((tick - freeze) / config.TICK_RATE, 2),
+            "by": str(plant.get("user_steamid") or ""),
+        }
+    return plants
+
+
 def _landing_index(arc):
     """Index of the projectile's resting point — the last sample where it still
     moved. Projectile entities linger stationary after landing; everything past
@@ -280,12 +378,14 @@ def parse_demo_with_context(path, target_steamid):
     positions = parse_positions(p, classified, target_steamid)
     nades = parse_grenades_for_rounds(p, classified, target_steamid)
     deaths = parse_deaths_for_rounds(evts, classified, target_steamid)
+    plants = parse_plants(p, rounds, demo_path=path)
     out = []
     for r in positions:
         out.append({"side": r["side"], "rtype": r["rtype"],
                     "official_num": r["official_num"], "path": r["path"],
                     "grenades": nades.get(r["official_num"], []),
-                    "death_t": deaths.get(r["official_num"])})
+                    "death_t": deaths.get(r["official_num"]),
+                    "plant": plants.get(r["official_num"])})
     return out, p, evts, classified
 
 
