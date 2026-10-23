@@ -714,10 +714,27 @@ export function useP5eCdp(
     return fixtureAggregator.ingestNdjson(text);
   }
 
+  // 每 15 秒把采集器状态推一条：eventsEmitted 是判断「Rust 到底有没有发出事件」
+  // 的唯一可靠信号，光看 phase 会被「已连接」骗过去。
+  let statusHeartbeat: ReturnType<typeof setInterval> | null = null;
+  function startStatusHeartbeat() {
+    if (statusHeartbeat !== null) return;
+    statusHeartbeat = setInterval(() => {
+      const current = status.value;
+      if (!current) return;
+      clientLog(
+        'DEBUG',
+        '心跳',
+        `phase=${current.phase} events=${current.eventsEmitted} target=${current.targetUrl ?? '-'}`,
+      );
+    }, 15_000);
+  }
+
   async function startCollect(options?: { port?: number; clientRoot?: string }) {
     lastError.value = null;
     try {
       status.value = await start5eCdpCollector(options);
+      startStatusHeartbeat();
     } catch (err) {
       lastError.value = localizeErrorMessage(err);
       throw err;
