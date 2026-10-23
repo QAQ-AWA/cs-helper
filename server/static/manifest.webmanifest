@@ -1,0 +1,19 @@
+{
+  "name": "CS Helper 对局房间",
+  "short_name": "CS Helper",
+  "description": "队友手机端：阵容、画像、习惯轨迹与 AI 战术建议",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

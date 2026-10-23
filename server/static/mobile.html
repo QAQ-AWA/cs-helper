@@ -4,73 +4,22 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f1117" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <title>CS Helper · 对局房间</title>
-<style>
-  :root{
-    --bg:#0f1117; --panel:#171a22; --panel-2:#1e222c; --line:#2a2f3a;
-    --text:#e8eaef; --muted:#8b93a7; --dim:#5f6779;
-    --ct:#5b9cf8; --t:#e0a44a; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%}
-  body{
-    background:var(--bg); color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    font-size:14px; line-height:1.55; padding:0 14px 40px;
-  }
-  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--bg) 70%,transparent);
-    padding:16px 0 10px;display:flex;align-items:center;gap:10px}
-  .code{font-size:22px;font-weight:600;letter-spacing:3px;font-variant-numeric:tabular-nums}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--dim);margin-left:auto}
-  .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(63,185,80,.15)}
-  .dot.warn{background:var(--warn)}
-  .cards{display:grid;gap:12px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-  .card h2{margin:0 0 10px;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.4px}
-  .map{display:flex;align-items:baseline;gap:10px}
-  .map b{font-size:18px;font-weight:600}
-  .pill{margin-left:auto;background:var(--panel-2);border:1px solid var(--line);
-    border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted)}
-  .teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .team h3{margin:0 0 8px;font-size:12px;font-weight:500;letter-spacing:.5px}
-  .team.ct h3{color:var(--ct)} .team.t h3{color:var(--t)}
-  .player{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line)}
-  .player:first-of-type{border-top:0}
-  .ava{width:26px;height:26px;border-radius:8px;background:var(--panel-2);flex:none;
-    display:grid;place-items:center;font-size:11px;color:var(--muted);overflow:hidden}
-  .ava img{width:100%;height:100%;object-fit:cover}
-  .pname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-  .self{color:var(--ok);font-size:10px;margin-left:4px}
-  .stat{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;line-height:1.3}
-  .muted{color:var(--muted);font-size:12px}
-  .members{display:flex;flex-wrap:wrap;gap:6px}
-  .chip{background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
-    padding:3px 9px;font-size:12px;color:var(--muted)}
-  .chip.off{opacity:.45}
-  #ai{white-space:pre-wrap;font-size:13px;color:#c9cfdd;min-height:20px}
-  .join{position:fixed;inset:0;background:rgba(8,10,14,.92);display:grid;place-items:center;padding:24px;z-index:20}
-  .join .box{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}
-  .join h1{margin:0 0 4px;font-size:17px;font-weight:600}
-  .join p{margin:0 0 16px;color:var(--muted);font-size:13px}
-  input{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
-    padding:11px 12px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px}
-  input:focus{border-color:var(--ct)}
-  button{width:100%;border:0;border-radius:10px;padding:12px;background:var(--ct);color:#07101f;
-    font-size:15px;font-weight:600}
-  button:disabled{opacity:.5}
-  .err{color:var(--bad);font-size:12px;min-height:16px;margin-top:8px}
-  .hidden{display:none!important}
-</style>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/static/icon.svg" />
+<link rel="stylesheet" href="/static/mobile.css" />
 </head>
 <body>
 <header>
+  <button id="back" class="back hidden" aria-label="返回">←</button>
   <div class="code" id="code">----</div>
   <div class="muted" id="hint">连接中…</div>
   <div class="dot" id="dot"></div>
 </header>
 
-<main class="cards">
-  <section class="card" id="match-card">
+<main id="view-room" class="cards">
+  <section class="card">
     <h2>当前对局</h2>
     <div class="map"><b id="map">等待电脑端检测…</b><span class="pill" id="countdown"></span></div>
     <div class="muted" id="demo-status" style="margin-top:6px"></div>
@@ -85,6 +34,11 @@
     <div class="muted" id="profile-source" style="margin-top:8px"></div>
   </section>
 
+  <section class="card hidden" id="paths-card">
+    <h2>习惯轨迹</h2>
+    <div id="paths-list" class="paths"></div>
+  </section>
+
   <section class="card hidden" id="ai-card">
     <h2>AI 战术分析</h2>
     <div id="ai"></div>
@@ -96,6 +50,35 @@
   </section>
 </main>
 
+<section id="view-player" class="hidden">
+  <div class="player-head">
+    <div>
+      <b id="p-name">选手</b>
+      <div class="muted" id="p-stats"></div>
+    </div>
+    <span class="pill" id="p-rounds"></span>
+  </div>
+
+  <div class="canvas-wrap"><canvas id="replay"></canvas></div>
+
+  <div class="controls">
+    <button id="play" class="primary">暂停</button>
+    <div class="seg" id="speed">
+      <button data-speed="1">1x</button>
+      <button data-speed="2" class="on">2x</button>
+      <button data-speed="4">4x</button>
+    </div>
+    <div class="seg" id="side">
+      <button data-side="" class="on">全部</button>
+      <button data-side="CT">CT</button>
+      <button data-side="T">T</button>
+    </div>
+  </div>
+
+  <div class="progress" id="progress"><div id="progress-bar"></div></div>
+  <div class="muted" id="p-legend">路径越集中，说明该选手的开局习惯越固定。</div>
+</section>
+
 <div class="join" id="join">
   <div class="box">
     <h1>加入对局房间</h1>
@@ -106,182 +89,6 @@
   </div>
 </div>
 
-<script>
-const $ = (id) => document.getElementById(id);
-const params = new URLSearchParams(location.search);
-let roomCode = (params.get('room') || '').toUpperCase();
-let roomMode = 'multi';
-const storeKeyFor = (code) => 'cs-helper-room-' + code;
-const state = { token: null, lastSeq: 0, ws: null, retry: 0 };
-
-function setConn(kind, text) {
-  const dot = $('dot');
-  dot.className = 'dot' + (kind === 'on' ? ' on' : kind === 'warn' ? ' warn' : '');
-  $('hint').textContent = text;
-}
-
-function showToast(msg) { $('join-err').textContent = msg; }
-
-async function join() {
-  const nickname = ($('nick').value || '').trim() || '队友';
-  const btn = $('join-btn');
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/v1/room/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode, nickname, deviceType: 'mobile' }),
-    });
-    const json = await res.json();
-    if (json.code !== 0) throw new Error(json.message || '加入失败');
-    state.token = json.data.token;
-    localStorage.setItem(storeKeyFor(json.data.roomCode || roomCode), state.token);
-    $('join').classList.add('hidden');
-    connect();
-  } catch (err) {
-    showToast(err.message || String(err));
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function connect() {
-  if (!state.token) { $('join').classList.remove('hidden'); return; }
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  setConn('warn', '连接中…');
-  const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(state.token)}&lastSeq=${state.lastSeq}`);
-  state.ws = ws;
-
-  ws.onopen = () => { state.retry = 0; setConn('on', '已连接'); };
-  ws.onmessage = (event) => {
-    let msg;
-    try { msg = JSON.parse(event.data); } catch { return; }
-    if (typeof msg.seq === 'number' && msg.action !== 'ROOM_STATE_SYNC') state.lastSeq = Math.max(state.lastSeq, msg.seq);
-    handle(msg.action, msg.payload || {});
-  };
-  ws.onclose = () => {
-    setConn('', '已断开');
-    const delay = Math.min(15000, 800 * Math.pow(1.7, state.retry++));
-    setTimeout(connect, delay + Math.random() * 400);
-  };
-  ws.onerror = () => setConn('warn', '连接异常');
-}
-
-function handle(action, payload) {
-  switch (action) {
-    case 'ROOM_STATE_SYNC':
-      if (typeof payload.latestSeq === 'number') state.lastSeq = Math.max(state.lastSeq, payload.latestSeq);
-      renderMembers(payload.members || []);
-      if (payload.match) renderMatch(payload.match, payload.profiles ? { players: payload.profiles } : null);
-      break;
-    case 'ROOM_MEMBERS_CHANGED':
-      renderMembers(payload.members || []);
-      break;
-    case 'MATCH_DETECTED':
-      renderMatch(payload);
-      break;
-    case 'PROFILE_READY':
-      renderMatch({ ...(state.match || {}), mapName: payload.mapName || state.match?.mapName, profileState: 'ready' }, payload);
-      break;
-    case 'AI_STREAM_CHUNK':
-      $('ai-card').classList.remove('hidden');
-      $('ai').textContent = payload.accumulated || '';
-      break;
-    case 'AI_REPORT_READY':
-      $('ai-card').classList.remove('hidden');
-      if (typeof payload.report === 'string') $('ai').textContent = payload.report;
-      break;
-    case 'TACTICAL_PATHS_READY':
-      $('demo-status').textContent = `轨迹已就绪：${(payload.players || []).length} 人`;
-      break;
-    case 'ROOM_ERROR':
-      setConn('warn', payload.message || '服务端异常');
-      $('demo-status').textContent = payload.message || '';
-      break;
-  }
-}
-
-function renderMembers(members) {
-  const box = $('members');
-  if (!members.length) { box.innerHTML = '<span class="muted">暂无</span>'; return; }
-  box.innerHTML = members.map((m) =>
-    `<span class="chip ${m.isOnline ? '' : 'off'}">${escapeHtml(m.nickname)}${m.deviceType === 'pc' ? ' · 房主' : ''}</span>`
-  ).join('');
-}
-
-function renderMatch(match, profile) {
-  state.match = match;
-  $('map').textContent = match.mapName || '未知地图';
-  const cd = match.countdownSeconds;
-  $('countdown').textContent = typeof cd === 'number' ? `准备 ${cd}s` : (match.phase || '');
-  const players = (profile && profile.players) || collectPlayers(match);
-  if (!players.length) return;
-  $('teams-card').classList.remove('hidden');
-  $('team-ct').innerHTML = players.filter((p) => p.team === 'ct').map(playerRow).join('') || '<div class="muted">—</div>';
-  $('team-t').innerHTML = players.filter((p) => p.team === 't').map(playerRow).join('') || '<div class="muted">—</div>';
-  if (profile) $('profile-source').textContent = '数据来源：电脑端上报，服务端待补全';
-}
-
-function collectPlayers(match) {
-  const teams = match.teams || {};
-  return ['ct', 't'].flatMap((side) => (teams[side] || []).map((p) => ({ ...p, team: side })));
-}
-
-function playerRow(p) {
-  const initial = escapeHtml((p.nickname || '?').slice(0, 1));
-  const avatar = p.avatarUrl
-    ? `<img src="${escapeAttr(p.avatarUrl)}" alt="" loading="lazy" onerror="this.remove()" />`
-    : initial;
-  const s = p.stats || {};
-  const rating = s.rating != null ? Number(s.rating).toFixed(2) : '—';
-  const kd = s.kd != null ? Number(s.kd).toFixed(2) : '—';
-  return `<div class="player">
-    <div class="ava">${avatar}</div>
-    <div class="pname">${escapeHtml(p.nickname || 'Unknown')}${p.isSelf ? '<span class="self">我</span>' : ''}</div>
-    <div class="stat">${rating}<br>K/D ${kd}</div>
-  </div>`;
-}
-
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-function escapeAttr(value) { return escapeHtml(value); }
-
-$('code').textContent = roomCode || '----';
-$('join-btn').addEventListener('click', join);
-$('nick').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
-
-async function boot() {
-  try {
-    const res = await fetch('/api/v1/config');
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      roomMode = json.data.mode || 'multi';
-      if (!roomCode && json.data.roomCode) roomCode = json.data.roomCode;
-      if (roomMode === 'single') {
-        $('join-hint').textContent = '当前为单房间模式，输入昵称即可进入。';
-      }
-    }
-  } catch (_) { /* 服务端不可达时仍走手动房间码 */ }
-
-  $('code').textContent = roomCode || '----';
-  if (!roomCode) {
-    setConn('', '缺少房间码');
-    showToast('请扫描电脑端二维码，或使用带 ?room=XXXXXX 的链接');
-    $('join-btn').disabled = true;
-    return;
-  }
-
-  const saved = localStorage.getItem(storeKeyFor(roomCode));
-  if (saved) {
-    state.token = saved;
-    $('join').classList.add('hidden');
-    connect();
-  }
-}
-
-boot();
-</script>
+<script type="module" src="/static/mobile.js"></script>
 </body>
 </html>

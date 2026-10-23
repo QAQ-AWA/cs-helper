@@ -13,7 +13,8 @@
 | `player_json.py` | demo/server | 单玩家回放 JSON 组装 |
 | `combat.py` | demo/server | K/D 与 AWP 持枪率 |
 | `config.py` | demo/server | 环境变量配置（`CS_SCOUT_*`） |
-| `setup_maps.py` | demo/server | 一次性生成 `data/maps/<map>/{radar.png,meta.json}` |
+| `setup_maps.py` | demo/server | 从 `awpy get maps` 生成地图资源（CDN 有时 403） |
+| `import_radar.py` | 本项目新增 | 从本地解包的 `<map>.png` + `<map>.txt` 生成地图资源，离线可用 |
 | `job_runner.py` | 本项目新增 | 子进程入口：stdin 收任务、stdout 发 JSONL、退出码表成败 |
 
 **未迁入**（有意为之）：
@@ -46,7 +47,23 @@ pip install -r requirements.txt
 cd engine && python -m pytest tests -v
 ```
 
-当前结果：**97 passed, 10 skipped**。skip 的是需要约 328 MB 真实 demo 的集成用例，缺文件时自动跳过。
+当前结果：**101 passed, 10 skipped**。skip 的是需要约 328 MB 真实 demo 的集成用例，缺文件时自动跳过。
+
+## 地图资源
+
+解析和回放都需要 `data/maps/<map>/{radar.png,meta.json}`（坐标变换 + 雷达底图），仓库不附带。两种来源：
+
+```bash
+# A. 官方雷达图（需要 awpy，CDN 偶尔 403）
+pip install awpy==2.0.2
+awpy get maps
+python setup_maps.py
+
+# B. 离线：从 pak01.vpk 解包出 resource/overviews 后导入
+python import_radar.py --from-dir D:/overviews
+```
+
+缺少资源时服务端会直接回 `ROOM_ERROR 2002`，不会跑到一半才失败。
 
 ## 与服务端的接缝
 

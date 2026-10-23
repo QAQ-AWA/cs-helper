@@ -9,8 +9,9 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 | 目录 | 内容 | 技术栈 | 状态 |
 | --- | --- | --- | --- |
 | [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
-| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ P2（38 tests） |
-| [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（97 tests） |
+| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ P2（45 tests） |
+| [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
+| [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（101 tests） |
 | [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
 | [`tools/`](tools/) | 端到端冒烟脚本 | Python | ✅ |
 | [`docs/`](docs/) | 架构与路线图 | Markdown | ✅ |
@@ -31,7 +32,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 │ 计算：engine/ 解析 Demo（异步）· AI 编排（P4）              │
 └──────────────┬───────────────────────────────────────────┘
                │ WSS
-        📱 队友手机（PWA，P3）：房间码加入 · 阵容 · 轨迹 · AI
+        📱 队友手机（PWA ✅）：房间 · 阵容 · 轨迹回放 · AI
 ```
 
 服务端是房间状态的唯一权威，PC 与手机看到的内容始终一致。
@@ -78,7 +79,7 @@ cd engine && python -m pytest tests -q
 | 套件 | 命令 | 结果 |
 | --- | --- | --- |
 | 服务端 | `cd server && pytest tests -q` | 38 passed |
-| 引擎 | `cd engine && pytest tests -q` | 97 passed, 10 skipped（缺 328MB 集成样本） |
+| 引擎 | `cd engine && pytest tests -q` | 101 passed, 10 skipped（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | 284 passed |
 | 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |
 

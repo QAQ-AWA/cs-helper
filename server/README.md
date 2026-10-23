@@ -84,7 +84,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 38 passed
+cd server && python -m pytest tests -q     # 45 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -105,6 +105,35 @@ Demo 任务用真实 `engine/job_runner.py` 验证过子进程链路（进度行
 
 流程：`JOB_PROGRESS(stage=demo)` 逐个玩家推进 → 完成后发出 `TACTICAL_PATHS_READY{artifactId}` → 客户端先拉索引，再按需拉 `.../players/{steamId}`（单人回放约 150KB，整队约 750KB）。
 地图资源缺失时返回 `ROOM_ERROR{code:2002}`，平台不是 5E 时任务标记 `skipped`。
+
+## 手机端（PWA）
+
+`static/` 下是一个免构建的多文件 PWA，由服务端直接托管（`/` + `/static/*`）：
+
+| 文件 | 职责 |
+| --- | --- |
+| `mobile.html` | 两个视图：房间（阵容/轨迹列表/AI）与选手详情（回放画布） |
+| `mobile.js` | 连接、事件分发、按玩家拉取回放 |
+| `mobile.css` | 深色移动端样式 |
+| `replay-core.js` | **回放渲染核**：雷达底图 + 路径 + 投掷物，框架无关，桌面端可复用 |
+| `manifest.webmanifest` / `sw.js` / `icon.svg` | 可安装、可离线打开外壳（API 永不缓存） |
+
+回放交互：播放/暂停、1x/2x/4x、按阵营过滤、进度条拖动。
+渲染依赖 `GET /maps/{map}/radar.png`（从 `engine/data/maps` 提供）；缺失时画网格占位并提示，不会白屏。
+
+### 地图资源（回放的前置条件）
+
+```bash
+# A. 官方雷达图（awpy 的 CDN 偶尔返回 403，失败就用 B）
+pip install -r engine/requirements-maps.txt
+engine/.venv/Scripts/awpy get maps      # 或在已激活的环境里直接 awpy get maps
+cd engine && python setup_maps.py
+
+# B. 离线：已有 resource/overviews 的 png+txt（可从 pak01.vpk 解包）
+cd engine && python import_radar.py --from-dir D:/overviews
+```
+
+没有 `data/maps/<map>/{radar.png,meta.json}` 时，解析任务会在开始时返回 `ROOM_ERROR 2002`，不会跑一半才失败；手机端回放会画网格占位而不是白屏。
 
 ## 为什么解析跑子进程
 

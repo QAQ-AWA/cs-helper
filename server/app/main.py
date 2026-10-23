@@ -10,6 +10,7 @@ import asyncio
 import gzip
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import events
+from . import events, settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
@@ -298,6 +299,30 @@ def create_app(
         @app.get("/")
         def index():
             return FileResponse(STATIC_DIR / "mobile.html")
+
+        @app.get("/manifest.webmanifest")
+        def manifest():
+            return FileResponse(
+                STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json"
+            )
+
+        @app.get("/sw.js")
+        def service_worker():
+            # Must be served from the root scope to control "/".
+            return FileResponse(STATIC_DIR / "sw.js", media_type="text/javascript")
+
+    _MAP_NAME_RE = re.compile(r"^[a-z0-9_]{1,32}$")
+    _MAP_FILES = frozenset({"radar.png", "meta.json"})
+
+    @app.get("/maps/{map_name}/{filename}")
+    def map_asset(map_name: str, filename: str):
+        if not _MAP_NAME_RE.match(map_name) or filename not in _MAP_FILES:
+            raise ApiError("地图资源不存在", code=1008, status=404)
+        path = (settings.MAPS_DIR / map_name / filename).resolve()
+        base = settings.MAPS_DIR.resolve()
+        if base not in path.parents or not path.is_file():
+            raise ApiError("地图资源不存在", code=1008, status=404)
+        return FileResponse(path)
 
     return app
 
