@@ -15,6 +15,7 @@ import '../index.css';
 import { teamSyncClient } from '@core/sync/sync-client';
 import MatchWorkspace from '../components/MatchWorkspace.vue';
 import ServerRoomPanel from '../components/ServerRoomPanel.vue';
+import TeamSyncSettingsSection from '../components/settings/TeamSyncSettingsSection.vue';
 
 type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty';
 
@@ -211,10 +212,17 @@ async function bootstrap() {
 
   createApp({
     // Fixture only: the real composable carries more methods than the panel reads.
-    render: () =>
-      view === 'workspace'
-        ? h(MatchWorkspace, { match: MATCH_RECORD as never, sync: sync as never, initialTab: tab as never })
-        : h(ServerRoomPanel, { sync: sync as never }),
+    render: () => {
+      if (view === 'sync') return h(TeamSyncSettingsSection);
+      if (view === 'workspace') {
+        return h(MatchWorkspace, {
+          match: MATCH_RECORD as never,
+          sync: sync as never,
+          initialTab: tab as never,
+        });
+      }
+      return h(ServerRoomPanel, { sync: sync as never });
+    },
   }).mount('#app');
 }
 

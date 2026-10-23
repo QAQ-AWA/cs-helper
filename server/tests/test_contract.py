@@ -48,3 +48,39 @@ def test_join_limiter_blocks_after_limit():
     assert limiter.allow("1.2.3.4")
     assert not limiter.allow("1.2.3.4")
     assert limiter.allow("5.6.7.8")
+
+
+def test_lan_addresses_skip_proxy_tunnels_and_prefer_home_routers():
+    from app.security import _is_usable_lan_ip, _lan_priority
+
+    # Proxy TUN / link-local / loopback must never become the phone link.
+    assert not _is_usable_lan_ip("198.18.0.1")
+    assert not _is_usable_lan_ip("198.19.3.4")
+    assert not _is_usable_lan_ip("127.0.0.1")
+    assert not _is_usable_lan_ip("169.254.10.1")
+    assert not _is_usable_lan_ip("100.64.1.2")
+
+    assert _is_usable_lan_ip("192.168.3.46")
+    assert _is_usable_lan_ip("10.0.0.8")
+    assert _is_usable_lan_ip("172.20.1.5")
+
+    # 192.168 beats 10.x beats 172.16-31.
+    assert _lan_priority("192.168.3.46") < _lan_priority("10.0.0.8") < _lan_priority("172.20.1.5")
+
+
+def test_lan_addresses_skip_proxy_tunnels_and_prefer_home_routers():
+    from app.security import _is_usable_lan_ip, _lan_priority
+
+    # Proxy TUN / link-local / loopback must never become the phone link.
+    assert not _is_usable_lan_ip("198.18.0.1")
+    assert not _is_usable_lan_ip("198.19.3.4")
+    assert not _is_usable_lan_ip("127.0.0.1")
+    assert not _is_usable_lan_ip("169.254.10.1")
+    assert not _is_usable_lan_ip("100.64.1.2")
+
+    assert _is_usable_lan_ip("192.168.3.46")
+    assert _is_usable_lan_ip("10.0.0.8")
+    assert _is_usable_lan_ip("172.20.1.5")
+
+    # 192.168 beats 10.x beats 172.16-31.
+    assert _lan_priority("192.168.3.46") < _lan_priority("10.0.0.8") < _lan_priority("172.20.1.5")

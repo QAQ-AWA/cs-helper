@@ -92,6 +92,47 @@ class JoinLimiter:
             return True
 
 
+def _is_usable_lan_ip(ip: str) -> bool:
+    """Reject addresses a phone can never reach.
+
+    ``198.18.0.0/15`` is the RFC 2544 benchmark range that proxy TUN adapters
+    (Clash and friends) hand out; it looks like a LAN IP and sorts first, so the
+    phone link ends up pointing at a black hole. Same story for link-local and
+    the CGNAT range.
+    """
+
+    if ip.startswith(("127.", "169.254.", "0.")):
+        return False
+    if ip.startswith("198.18.") or ip.startswith("198.19."):
+        return False
+    if ip.startswith("100."):
+        # 100.64.0.0/10 carrier-grade NAT, common for VPN/tunnel adapters.
+        try:
+            second = int(ip.split(".")[1])
+        except (IndexError, ValueError):
+            return False
+        if 64 <= second <= 127:
+            return False
+    return True
+
+
+def _lan_priority(ip: str) -> tuple[int, str]:
+    """Home routers hand out 192.168.x; prefer it over 10.x / 172.16-31.x."""
+
+    if ip.startswith("192.168."):
+        return (0, ip)
+    if ip.startswith("10."):
+        return (1, ip)
+    if ip.startswith("172."):
+        try:
+            second = int(ip.split(".")[1])
+        except (IndexError, ValueError):
+            return (3, ip)
+        if 16 <= second <= 31:
+            return (2, ip)
+    return (3, ip)
+
+
 def lan_addresses() -> list[str]:
     """Best-effort LAN IPv4 list so the PC can render a scannable phone URL."""
 
@@ -113,7 +154,7 @@ def lan_addresses() -> list[str]:
 
     unique: list[str] = []
     for ip in found:
-        if ip.startswith(("127.", "169.254.")) or ip in unique:
+        if not _is_usable_lan_ip(ip) or ip in unique:
             continue
         unique.append(ip)
-    return unique
+    return sorted(unique, key=_lan_priority)

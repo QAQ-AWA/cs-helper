@@ -234,6 +234,8 @@ function onBackFromP5e() {
       :has-update="updateState.hasUpdate"
       :comments="comments"
       :match-history="matchHistory"
+      :relay-status="teamSync.status.value"
+      :relay-room="teamSync.settings.value.enabled ? teamSync.settings.value.roomCode : ''"
       @clear-logs="clearLogEntries"
       @open-settings="openSettings()"
       @open-match-hud="openMatchHudDialog()"

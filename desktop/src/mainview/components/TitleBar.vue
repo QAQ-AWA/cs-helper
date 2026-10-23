@@ -38,6 +38,9 @@ const props = defineProps<{
   hasUpdate: boolean;
   comments: ReturnType<typeof useComments>;
   matchHistory: MatchHistoryApi;
+  /** 小队协同的连接状态，标题栏常驻显示。 */
+  relayStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
+  relayRoom?: string;
 }>();
 
 const emit = defineEmits<{
@@ -114,8 +117,27 @@ const showBackButton = computed(() => props.view === 'settings');
         class="flex h-full cursor-pointer items-center gap-1.5 px-3 text-[12px] text-fg-muted transition-colors duration-200 hover:bg-elevated hover:text-fg-secondary"
         @click="emit('openTeamSync')"
       >
-        <Users class="h-4 w-4 text-emerald-400" />
+        <Users class="h-4 w-4" :class="relayStatus === 'connected' ? 'text-accent' : 'text-fg-muted'" />
         <span class="hidden sm:inline">小队协同</span>
+        <span
+          v-if="relayRoom"
+          class="flex items-center gap-1 text-[11px]"
+          :title="relayStatus === 'connected' ? '已连接' : '未连接'"
+        >
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :class="
+              relayStatus === 'connected'
+                ? 'bg-success'
+                : relayStatus === 'connecting'
+                  ? 'bg-warning'
+                  : relayStatus === 'error'
+                    ? 'bg-danger'
+                    : 'bg-fg-muted'
+            "
+          />
+          <span class="font-mono tracking-wider text-fg-muted">{{ relayRoom }}</span>
+        </span>
       </button>
 
       <button
