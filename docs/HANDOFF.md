@@ -224,6 +224,29 @@ cd desktop && npx vitest run    # 286
 
 要彻底删干净，得先做「删掉客户端 AI 栈」这一刀（`src/core/ai/*` 约 4000 行 + `useAiAnalysis` + `AiAnalysisPanel` + `P5ePostMatchPanel` 的 AI 部分），再改 `team-table-shared` 的段位显示。这是一次独立重构，别和别的改动混在一起做。
 
+### 0.2.3 对局面板重写（本轮）
+
+旧的 `MatchFeaturedPanel`（756 行、五页签）挂着客户端 AI 的 props/watcher，还带 719 行的
+队伍表格与列自定义器。现在换成四个直白的问题：
+
+```
+MatchWorkspace
+├─ header：地图 / 对局号 / 我方阵营·来源 / 房间 / 准备倒计时
+└─ tabs：阵容 · 分析 · 轨迹 · 赛后
+    ├─ RosterBoard      两列阵容，Rating/ADR/K/D/HS%，服务端赛季值优先
+    ├─ ServerAnalysisPanel
+    ├─ TacticalPathsPanel
+    └─ P5ePostMatchPanel
+```
+
+删除（只被彼此引用，已无入口）：`MatchFeaturedPanel`、`TeamDataBoard`、`TeamCompareBoard`、
+`TeamPlayerTable`、`AiAnalysisPanel`、`ai-v3-ui.test.ts`。主包 842KB → 486KB。
+
+实时视图与历史回放都走 `MatchWorkspace`；历史回放没有 `sync`，分析页显示「历史回放不包含服务端分析」。
+
+**待办**：轨迹页与赛后页仍是旧组件（`TacticalPathsPanel` / `P5ePostMatchPanel`），视觉语言与新面板还不统一。
+
+
 ### 0.3 数据从哪来（签名网关）
 
 | 数据 | 来源 | 谁在抓 |
