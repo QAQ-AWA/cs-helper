@@ -1,0 +1,273 @@
+import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { homeDir } from '@tauri-apps/api/path';
+import { getCurrentWindow, PhysicalSize, UserAttentionType } from '@tauri-apps/api/window';
+import type {
+  AiAnalysisDeltaEvent,
+  AiAnalysisDoneEvent,
+  AiAnalysisErrorEvent,
+  AiAnalysisCancelledEvent,
+  AiAnalysisStartEvent,
+  AiSettingsPublic,
+  SaveAiSettingsInput,
+  StartAiAnalysisInput,
+} from '@core/ai/types';
+import type { DownloadUpdateResult, UpdateCheckResult, UpdateProgressEvent } from '@core/update/types';
+import type { ChangelogReleaseDetail, ChangelogReleaseSummary } from '@core/update/changelog';
+import type { LogLinePayload, WatcherStatus } from '@core/types';
+import { getActivePlatform } from '@platforms/registry';
+import type { AppLocale } from './i18n';
+import type {
+  PerfectAuthStatus,
+  PerfectDecryptInput,
+  PerfectDecryptOutput,
+} from '@platforms/perfect/auth';
+import type { PerfectApiDebugReport } from '@platforms/perfect/api-debug';
+
+const hasTauriWindow = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const appWindow = hasTauriWindow ? getCurrentWindow() : null;
+
+function waitForFirstPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    };
+    const timer = setTimeout(finish, 60);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        finish();
+      });
+    });
+  });
+}
+
+/** 首帧绘制完成后再显示主窗口，并做一次 1px resize 以规避 WebView2 首帧白屏。 */
+export async function showMainWindowAfterFirstPaint(): Promise<void> {
+  await waitForFirstPaint();
+  if (!appWindow) return;
+  await appWindow.show();
+
+  try {
+    const size = await appWindow.innerSize();
+    await appWindow.setSize(new PhysicalSize(size.width + 1, size.height));
+    await appWindow.setSize(new PhysicalSize(size.width, size.height));
+  } catch {
+    // resize nudge 失败不影响正常使用
+  }
+}
+
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    await openUrl(url);
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+export async function minimizeWindow(): Promise<void> {
+  await appWindow?.minimize();
+}
+
+/** Flash the Windows taskbar button without showing or focusing the window. */
+export async function requestMatchAttention(): Promise<void> {
+  await appWindow?.requestUserAttention(UserAttentionType.Informational);
+}
+
+export async function toggleMaximizeWindow(): Promise<void> {
+  await appWindow?.toggleMaximize();
+}
+
+export async function closeWindow(): Promise<void> {
+  await appWindow?.close();
+}
+
+export async function closeApp(): Promise<void> {
+  await invoke('close_app');
+}
+
+export async function setAppLocale(locale: AppLocale): Promise<void> {
+  await invoke('set_app_locale', { locale });
+}
+
+export async function getLogStatus(): Promise<WatcherStatus> {
+  return invoke<WatcherStatus>('get_log_status');
+}
+
+export async function readLatestLogLines(logDir: string): Promise<string[]> {
+  return invoke<string[]>('read_latest_log_lines', { logDir });
+}
+
+export async function startLogWatch(logDir?: string): Promise<void> {
+  const dir = logDir ?? getActivePlatform().buildLogDir(await homeDir());
+  await invoke('start_log_watch', { logDir: dir });
+}
+
+export async function stopLogWatch(): Promise<void> {
+  await invoke('stop_log_watch');
+}
+
+export async function fetchPerfectPlayerStatsRaw(steamId: string): Promise<unknown> {
+  return invoke<unknown>('fetch_perfect_player_stats', { steamId });
+}
+
+export async function debugPerfectPlayerApis(steamId?: string): Promise<PerfectApiDebugReport> {
+  return invoke<PerfectApiDebugReport>('debug_perfect_player_apis', {
+    steamId: steamId?.trim() || null,
+  });
+}
+
+export async function searchPerfectBoardUserRaw(steamId: string): Promise<unknown> {
+  return invoke<unknown>('search_perfect_board_user', { steamId });
+}
+
+export async function getPerfectAuthStatus(): Promise<PerfectAuthStatus> {
+  return invoke<PerfectAuthStatus>('get_perfect_auth_status');
+}
+
+export async function startPerfectQrLogin(): Promise<PerfectAuthStatus> {
+  return invoke<PerfectAuthStatus>('start_perfect_qr_login');
+}
+
+export async function startPerfectSteamLogin(): Promise<PerfectAuthStatus> {
+  return invoke<PerfectAuthStatus>('start_perfect_steam_login');
+}
+
+export async function cancelPerfectLogin(): Promise<PerfectAuthStatus> {
+  return invoke<PerfectAuthStatus>('cancel_perfect_login');
+}
+
+export async function clearPerfectAuth(): Promise<PerfectAuthStatus> {
+  return invoke<PerfectAuthStatus>('clear_perfect_auth');
+}
+
+export async function decryptPerfectResponse(
+  input: PerfectDecryptInput,
+): Promise<PerfectDecryptOutput> {
+  return invoke<PerfectDecryptOutput>('decrypt_perfect_response', { input });
+}
+
+export async function onPerfectAuthState(
+  handler: (status: PerfectAuthStatus) => void,
+): Promise<UnlistenFn> {
+  return listen<PerfectAuthStatus>('perfect-auth-state', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onLogLine(
+  handler: (line: LogLinePayload) => void,
+): Promise<UnlistenFn> {
+  return listen<LogLinePayload>('log-line', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onWatcherStatus(
+  handler: (status: WatcherStatus) => void,
+): Promise<UnlistenFn> {
+  return listen<WatcherStatus>('watcher-status', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function getAiSettingsPath(): Promise<string> {
+  return invoke<string>('get_ai_settings_path');
+}
+
+export async function loadAiSettings(): Promise<AiSettingsPublic> {
+  return invoke<AiSettingsPublic>('load_ai_settings');
+}
+
+export async function saveAiSettings(input: SaveAiSettingsInput): Promise<AiSettingsPublic> {
+  return invoke<AiSettingsPublic>('save_ai_settings', { input });
+}
+
+export async function startAiAnalysis(input: StartAiAnalysisInput): Promise<void> {
+  await invoke('start_ai_analysis', { input });
+}
+
+export async function cancelAiAnalysis(): Promise<void> {
+  await invoke('cancel_ai_analysis');
+}
+
+export async function onAiAnalysisStart(
+  handler: (event: AiAnalysisStartEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiAnalysisStartEvent>('ai-analysis-start', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onAiAnalysisDelta(
+  handler: (event: AiAnalysisDeltaEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiAnalysisDeltaEvent>('ai-analysis-delta', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onAiAnalysisDone(
+  handler: (event: AiAnalysisDoneEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiAnalysisDoneEvent>('ai-analysis-done', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onAiAnalysisError(
+  handler: (event: AiAnalysisErrorEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiAnalysisErrorEvent>('ai-analysis-error', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function onAiAnalysisCancelled(
+  handler: (event: AiAnalysisCancelledEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiAnalysisCancelledEvent>('ai-analysis-cancelled', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function getAppVersion(): Promise<string> {
+  return invoke<string>('get_app_version');
+}
+
+export async function checkForUpdate(): Promise<UpdateCheckResult> {
+  return invoke<UpdateCheckResult>('check_for_update');
+}
+
+export async function listChangelogReleases(): Promise<ChangelogReleaseSummary[]> {
+  return invoke('list_changelog_releases');
+}
+
+export async function getChangelogRelease(tag: string): Promise<ChangelogReleaseDetail> {
+  return invoke('get_changelog_release', { tag });
+}
+
+export async function downloadUpdate(version: string): Promise<DownloadUpdateResult> {
+  return invoke<DownloadUpdateResult>('download_update', { version });
+}
+
+export async function applyUpdateAndRestart(newExePath: string): Promise<void> {
+  await invoke('apply_update_and_restart', { newExePath });
+}
+
+export async function onUpdateProgress(
+  handler: (event: UpdateProgressEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<UpdateProgressEvent>('update-progress', (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function getCommentClientKey(): Promise<string> {
+  return invoke<string>('get_comment_client_key');
+}

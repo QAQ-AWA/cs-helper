@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+import { applyResolvedLocale } from '../i18n';
+import { getDefaultVisibleColumnKeys, getDefaultColumnOrder, getStorageKeyForPlatform, getTeamTableColumnDefs } from './team-table-columns';
+import { cellValueClass } from './team-table-shared';
+import type { MatchPlayer } from '@core/match/models';
+
+describe('team table columns by platform', () => {
+  it('uses the current Perfect stats defaults and removes unsupported legacy columns', () => {
+    applyResolvedLocale('zh-CN');
+    const keys = getDefaultVisibleColumnKeys('perfect');
+    expect(keys).toEqual([
+      'nickname', 'score', 'peakRank', 'seasonRating', 'adpr', 'hsRate',
+      'rapidStopSuccessRate', 'reactionTime', 'mapPool', 'primaryWeapon', 'seasonWe',
+    ]);
+    expect(keys).not.toContain('recentWins');
+    expect(keys).not.toContain('rating');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'score')?.label).toBe('ELO');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'hsRate')?.label).toBe('爆头率');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'peakRank')?.label).toBe('最高分');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'seasonRating')?.label).toBe('Rating');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'rating')).toBeUndefined();
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'mapPool')?.width).toBe('11%');
+    expect(getTeamTableColumnDefs('perfect').find((column) => column.key === 'seasonWe')).toMatchObject({
+      label: 'WE',
+      description: '当前赛季WE',
+      defaultVisible: true,
+    });
+    expect(keys).not.toContain('kd');
+    expect(keys).not.toContain('rws');
+    expect(getDefaultColumnOrder('perfect').indexOf('seasonWe')).toBeGreaterThan(
+      getDefaultColumnOrder('perfect').indexOf('primaryWeapon'),
+    );
+    expect(getStorageKeyForPlatform('perfect')).toContain('v18');
+    expect(getStorageKeyForPlatform('5e')).toContain('v10');
+    const defs = getTeamTableColumnDefs('perfect');
+    expect(defs.find((column) => column.key === 'kast')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'tradeFragRate')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'clutch1v1Rate')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'clutchWinRate')?.label).toBe('残局胜率');
+    expect(defs.find((column) => column.key === 'radar_fire_power')?.category).toBe('radar');
+    expect(defs.find((column) => column.key === 'radar_marksmanship')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'radar_follow_up_shot')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'radar_first')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'radar_item')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'radar_1vn')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'radar_sniper')?.defaultVisible).toBe(false);
+    expect(defs.find((column) => column.key === 'mvpCount')?.defaultVisible).toBe(false);
+    expect(defs.some((column) => column.label === 'CT Rating')).toBe(false);
+    expect(defs.some((column) => column.label === 'T Rating')).toBe(false);
+  });
+
+  it('does not color-code K/D', () => {
+    const high = { steamId: '1', nickname: 'high', teamSide: 0, isSingle: true, radar: {}, recentResults: [], recentRatings: [], tags: [], kd: 2 } satisfies MatchPlayer;
+    const low = { steamId: '2', nickname: 'low', teamSide: 0, isSingle: true, radar: {}, recentResults: [], recentRatings: [], tags: [], kd: 0.5 } satisfies MatchPlayer;
+    expect(cellValueClass('kd', high)).toBe('text-slate-700');
+    expect(cellValueClass('kd', low)).toBe('text-slate-700');
+  });
+
+  it('uses the legacy WE threshold colors for recent and season WE', () => {
+    const player = {
+      steamId: '76561198104088654', nickname: 'test', teamSide: 0, isSingle: true,
+      radar: {}, recentResults: [], recentRatings: [], tags: [], weAvg: 8.1, seasonWe: 7.9,
+    } satisfies MatchPlayer;
+    expect(cellValueClass('weAvg', player)).toBe('font-semibold tabular-nums text-emerald-700');
+    expect(cellValueClass('seasonWe', player)).toBe('font-semibold tabular-nums text-rose-600');
+    expect(cellValueClass('weAvg', player)).not.toContain('bg-');
+    expect(cellValueClass('seasonWe', player)).not.toContain('bg-');
+  });
+
+  it('uses 5e default columns with combat and recent form', () => {
+    const keys = getDefaultVisibleColumnKeys('5e');
+    expect(keys).toEqual([
+      'nickname',
+      'score',
+      'seasonRating',
+      'rating',
+      'adpr',
+      'weRaw',
+      'kd',
+      'hsRate',
+      'recentWins',
+    ]);
+    expect(keys).not.toContain('mapWinRate');
+    expect(keys).not.toContain('rankLevel');
+    expect(keys).not.toContain('rankNum');
+  });
+});

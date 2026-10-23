@@ -1,0 +1,49 @@
+{
+  "name": "cs-match-helper",
+  "private": true,
+  "version": "4.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "predev": "node scripts/version.mjs sync",
+    "prebuild": "node scripts/version.mjs sync",
+    "build": "tauri build --no-bundle && node scripts/release.mjs",
+    "version:get": "node scripts/version.mjs get",
+    "version:set": "node scripts/version.mjs set",
+    "version:sync": "node scripts/version.mjs sync",
+    "version:verify": "node scripts/version.mjs verify",
+    "build:exe": "tauri build --no-bundle",
+    "build:frontend": "vite build",
+    "icon": "tauri icon src/mainview/assets/icons/app-icon.svg && cargo build --manifest-path src-tauri/Cargo.toml",
+    "test": "vitest run",
+    "audit:product-boundary": "node scripts/product-boundary-audit.mjs",
+    "test:watch": "vitest",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "animejs": "^4.4.1",
+    "lucide-vue-next": "1.0.0",
+    "marked": "^18.0.5",
+    "motion-v": "^2.3.0",
+    "vue": "3.5.35",
+    "vue-i18n": "^11.4.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.0",
+    "@tauri-apps/cli": "2.11.2",
+    "@types/animejs": "^3.1.13",
+    "@types/node": "^26.2.0",
+    "@vitejs/plugin-vue": "6.0.7",
+    "tailwindcss": "4.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.16",
+    "vitest": "^3.2.6",
+    "vue-tsc": "2.2.8"
+  },
+  "overrides": {
+    "@vueuse/core": "14.4.0"
+  }
+}

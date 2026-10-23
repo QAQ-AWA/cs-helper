@@ -1,0 +1,57 @@
+<script setup lang="ts">
+import { MessageCircle } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { localize as l } from '../../i18n';
+import { isValidSteamId64 } from '@core/comments/steam-id';
+
+const props = defineProps<{
+  steamId: string;
+  count?: number;
+  countHasMore?: boolean;
+}>();
+
+const emit = defineEmits<{
+  open: [];
+}>();
+
+const enabled = computed(() => isValidSteamId64(props.steamId));
+const displayCount = computed(() => props.count ?? 0);
+const hasComments = computed(() => displayCount.value > 0);
+
+const countLabel = computed(() => {
+  const n = displayCount.value;
+  if (n <= 0) return '';
+  if (n > 99) return '99+';
+  return props.countHasMore ? `${n}+` : String(n);
+});
+
+const label = computed(() =>
+  hasComments.value
+    ? l(`查看 ${countLabel.value} 条评论`, `View ${countLabel.value} comments`)
+    : l('查看或发表评论', 'View or add comments'),
+);
+
+function onClick() {
+  if (!enabled.value) return;
+  emit('open');
+}
+</script>
+
+<template>
+  <button
+    v-if="enabled"
+    type="button"
+    class="comment-badge ml-1.5 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+    :class="
+      hasComments
+        ? 'comment-badge--active text-blue-500 hover:bg-blue-50/60 hover:text-blue-600'
+        : 'comment-badge--idle text-slate-400 opacity-0 hover:bg-blue-50/60 hover:text-blue-500 focus-visible:opacity-100 group-hover:opacity-100'
+    "
+    :title="label"
+    :aria-label="label"
+    @click.stop="onClick"
+  >
+    <MessageCircle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+    <span v-if="hasComments" class="min-w-2 tabular-nums">{{ countLabel }}</span>
+  </button>
+</template>

@@ -1,0 +1,134 @@
+import type { MatchHistoryListItem } from '@core/match/history';
+import { resolveCanonicalMapName, resolveMapAsset } from '@core/match/history/map-assets';
+import { currentLocale, localize as l } from '../i18n';
+
+export function platformLabel(platformId: string): string {
+  if (platformId === 'perfect') return l('完美', 'Perfect World');
+  if (platformId === '5e') return '5E';
+  return l('未知平台', 'Unknown platform');
+}
+
+export function formatMapDisplayName(raw?: string | null): string | null {
+  const asset = resolveMapAsset(raw);
+  return asset?.en ?? null;
+}
+
+/** 列表主标题：引擎地图 ID，例如 de_cache */
+export function historyPrimaryMapTitle(item: MatchHistoryListItem): string {
+  const canonical = resolveCanonicalMapName(item.mapName);
+  if (canonical) return canonical;
+  return l('未知地图', 'Unknown map');
+}
+
+/** 列表副行：本地化常用名（与主标题不同时） */
+export function historyMapEnCaption(item: MatchHistoryListItem): string | null {
+  const asset = resolveMapAsset(item.mapName);
+  if (!asset) return null;
+  const title = historyPrimaryMapTitle(item);
+  const caption = currentLocale() === 'en-US' ? asset.en : asset.zh;
+  if (!caption || caption === title) return null;
+  return caption;
+}
+
+export function historyItemTitle(item: MatchHistoryListItem): string {
+  return historyPrimaryMapTitle(item);
+}
+
+export function formatHistoryTime(
+  savedAt: number,
+  matchTime?: string,
+  options?: { short?: boolean },
+): string {
+  const short = options?.short ?? false;
+  const date = resolveHistoryDate(savedAt, matchTime);
+  if (!date) return matchTime?.trim() || l('时间未知', 'Unknown time');
+
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate();
+
+  const hm = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  if (sameDay) return short ? hm : l(`今天 ${hm}`, `Today ${hm}`);
+  if (isYesterday) return l(`昨天 ${hm}`, `Yesterday ${hm}`);
+  if (date.getFullYear() === now.getFullYear()) {
+    return short
+      ? `${date.getMonth() + 1}/${date.getDate()} ${hm}`
+      : l(`${date.getMonth() + 1}月${date.getDate()}日 ${hm}`, new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date));
+  }
+  return short
+    ? `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
+    : l(`${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hm}`, new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date));
+}
+
+function resolveHistoryDate(savedAt: number, matchTime?: string): Date | null {
+  if (typeof savedAt === 'number' && Number.isFinite(savedAt) && savedAt > 0) {
+    const d = new Date(savedAt);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  if (matchTime) {
+    const parsed = Date.parse(matchTime);
+    if (!Number.isNaN(parsed)) return new Date(parsed);
+  }
+  return null;
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0');
+}
+
+/** 列表时间戳：优先 savedAt，其次 matchTime */
+export function historyItemTimestamp(item: MatchHistoryListItem): number {
+  if (typeof item.savedAt === 'number' && Number.isFinite(item.savedAt) && item.savedAt > 0) {
+    return item.savedAt;
+  }
+  if (item.matchTime) {
+    const parsed = Date.parse(item.matchTime);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return item.updatedAt ?? 0;
+}
+
+/** 按时间从新到旧排序 */
+export function sortHistoryItemsNewestFirst(items: MatchHistoryListItem[]): MatchHistoryListItem[] {
+  return [...items].sort((a, b) => {
+    const diff = historyItemTimestamp(b) - historyItemTimestamp(a);
+    if (diff !== 0) return diff;
+    return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+  });
+}
+
+export function historyFilterOptions() {
+  return [
+    { id: 'all' as const, label: l('全部', 'All') },
+    { id: 'perfect' as const, label: l('完美', 'Perfect World') },
+    { id: '5e' as const, label: '5E' },
+  ];
+}
+
+export type HistoryPlatformFilter = 'all' | 'perfect' | '5e';
+
+export function matchesPlatformFilter(
+  platformId: string,
+  filter: HistoryPlatformFilter,
+): boolean {
+  if (filter === 'all') return true;
+  return platformId === filter;
+}
+
+/** 有可用 AI 分析结果时返回 true（列表仅作有无标记） */
+export function historyHasAiAnalysis(item: MatchHistoryListItem): boolean {
+  return item.aiStatus === 'done';
+}
+
+export function formatMatchAvgScore(score?: number | null): string | null {
+  if (score == null || !Number.isFinite(score)) return null;
+  return Math.round(score).toLocaleString('en-US');
+}

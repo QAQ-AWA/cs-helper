@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-set-app-locale"
+description = "允许主程序同步界面语言与窗口标题"
+commands.allow = ["set_app_locale"]

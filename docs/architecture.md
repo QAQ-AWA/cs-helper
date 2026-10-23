@@ -1,6 +1,6 @@
 # 架构设计
 
-> 适用基线：合集仓库 `v0.1`（P1 完成）。桌面端见 [cs-helper-exe](https://github.com/QAQ-AWA/cs-helper-exe)。
+> 适用基线：`v0.1`（P0/P1 完成）。三端均在本仓库：`desktop/` · `server/` · `engine/`。
 
 ## 1. 定位
 
@@ -17,7 +17,7 @@
 ## 2. 拓扑
 
 ```
-┌── PC 客户端（cs-helper-exe）──────────────────────────────┐
+┌── PC 客户端（desktop/）────────────────────────────────────┐
 │ 5E CDP 侦测 · 完美世界日志解密 · 就绪倒计时 · 本地展示      │
 │ 职责：只上报"我看到了什么"，不上报结论                      │
 └───────────────┬──────────────────────────────────────────┘
@@ -60,11 +60,11 @@
 
 | 模块 | 位置 | 说明 |
 | --- | --- | --- |
+| 桌面客户端 | `desktop/` | Tauri v2 + Vue 3；Rust 做本机侦测，可脱离云端单独运行 |
 | Demo 检索/下载/解析 | `engine/` | 纯计算，无 HTTP 框架 |
 | 房间/编排/分发 | `server/` | 见 `server/README.md` |
 | 事件契约 | `contract/events.json` | 与 `server/app/events.py` 互为镜像 |
-| 本机侦测 | cs-helper-exe | Rust CDP / 日志解密 |
-| 回放渲染 | 待抽为 `replay-core` | 上游 `replay.js` 仅 379 行，PC/手机共用 |
+| 回放渲染 | 待抽为 `desktop/src/replay-core` | 上游 `replay.js` 仅 379 行，PC/手机共用 |
 
 ## 5. 契约
 
