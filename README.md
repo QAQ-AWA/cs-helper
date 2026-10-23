@@ -8,7 +8,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 
 | 目录 | 内容 | 技术栈 | 状态 |
 | --- | --- | --- | --- |
-| [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
+| [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报、习惯轨迹 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
 | [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ 可用（55 tests） |
 | [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
 | [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（104 tests） |

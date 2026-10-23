@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { Clock, Table2, GitCompareArrows, Columns3, Trophy } from 'lucide-vue-next';
+import { Clock, Table2, GitCompareArrows, Columns3, Trophy, Route } from 'lucide-vue-next';
 import AiSparklesIcon from './AiSparklesIcon.vue';
 import PlatformLogo from './PlatformLogo.vue';
+import TacticalPathsPanel from './TacticalPathsPanel.vue';
 import type { MatchRecord, MatchPlayer } from '@core/match/models';
 import type { P5ePostMatchReport } from '@platforms/5e/post-match';
 import { isAiAnalysisActive, type AiPlayerSignal } from '@core/ai/types';
@@ -133,7 +134,7 @@ function formatPct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-const activeTab = ref<'team-data' | 'compare' | 'ai' | 'post-match'>('team-data');
+const activeTab = ref<'team-data' | 'compare' | 'ai' | 'post-match' | 'paths'>('team-data');
 const cachedPostMatch = ref<P5ePostMatchReport | null>(props.initialPostMatch ?? null);
 
 watch(
@@ -618,6 +619,22 @@ function eloCompareTitle(
             class="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"
           />
         </button>
+        <button
+          v-if="platformId === '5e'"
+          type="button"
+          role="tab"
+          class="inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors duration-200"
+          :class="
+            activeTab === 'paths'
+              ? 'bg-white text-emerald-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          "
+          :aria-selected="activeTab === 'paths'"
+          @click="activeTab = 'paths'"
+        >
+          <Route class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          {{ l('习惯轨迹', 'Paths') }}
+        </button>
         </div>
       </div>
     </header>
@@ -668,6 +685,7 @@ function eloCompareTitle(
           :history-mode="isHistory"
           @report-updated="onPostMatchUpdated"
         />
+        <TacticalPathsPanel v-else-if="activeTab === 'paths'" key="paths" />
         <AiAnalysisPanel
           v-else
           key="ai"

@@ -64,7 +64,7 @@
 | Demo 检索/下载/解析 | `engine/` | 纯计算，无 HTTP 框架 |
 | 房间/编排/分发 | `server/` | 见 `server/README.md` |
 | 事件契约 | `contract/events.json` | 与 `server/app/events.py` 互为镜像 |
-| 回放渲染 | 待抽为 `desktop/src/replay-core` | 上游 `replay.js` 仅 379 行，PC/手机共用 |
+| 回放渲染 | `server/static/replay-core.js` | 单一实现，手机直接 import，桌面经 `@shared` 别名复用 |
 
 ## 5. 契约
 

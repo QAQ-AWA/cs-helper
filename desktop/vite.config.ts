@@ -17,6 +17,8 @@ export default defineConfig({
       '@assets': path.resolve(rootDir, 'src/mainview/assets'),
       '@core': path.resolve(rootDir, 'src/core'),
       '@platforms': path.resolve(rootDir, 'src/platforms'),
+      // 回放渲染核与手机端共用同一份文件，避免两份实现漂移。
+      '@shared': path.resolve(rootDir, '../server/static'),
     },
   },
   build: {
@@ -34,5 +36,9 @@ export default defineConfig({
   server: {
     strictPort: true,
     port: 5173,
+    fs: {
+      // 允许读取仓库根下的 server/static
+      allow: [rootDir, path.resolve(rootDir, '..')],
+    },
   },
 });
