@@ -7,7 +7,7 @@
  * 失败一律静默——日志不能影响主流程。
  */
 
-type LogLevel = 'INFO' | 'WARN' | 'ERROR';
+type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 interface LogLine {
   at: string;

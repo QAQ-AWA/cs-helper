@@ -627,6 +627,11 @@ export function useP5eCdp(
   }
 
   function handleEvent(raw: P5eCdpEvent) {
+    // 先记一条「到底有没有事件进来」：排查时最怕的是采集层根本没交数据，
+    // 而下游的日志都在过滤之后，看起来像"什么都没发生"。
+    const rawUrl = (raw as { url?: string }).url ?? '';
+    const hasBody = Boolean((raw as { responseBody?: unknown }).responseBody);
+    clientLog('DEBUG', '事件', `${raw.kind} ${rawUrl} body=${hasBody ? 'y' : 'n'}`);
     if (isP5eWsEvent(raw)) {
       pushWsLogEntry(raw);
       if (raw.kind === 'ws_frame') {
