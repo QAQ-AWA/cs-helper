@@ -113,3 +113,22 @@ def test_opening_deaths_and_early_utility_are_counted():
     row = profile["players"][0]
     assert row["openingDeaths"] == 1
     assert row["earlyUtility"] == {"smoke": 1, "flash": 1}
+
+
+def test_team_plant_totals_are_deduplicated_by_round():
+    """同一个下包会出现在每个选手的回合里，横向相加会翻倍。"""
+    shared = {"site": "B", "x": -1000, "y": -1000, "t": 40.0}
+    players = [
+        _player("a", [{"side": "T", "round_id": 7, "path": _path((0, 0, 0), (20, 0, 0)), "plant": shared}]),
+        _player("b", [{"side": "T", "round_id": 7, "path": _path((0, 0, 0), (20, 0, 0)), "plant": shared}]),
+        _player("c", [
+            {"side": "T", "round_id": 7, "path": _path((0, 0, 0), (20, 0, 0)), "plant": shared},
+            {"side": "T", "round_id": 8, "path": _path((0, 0, 0), (20, 0, 0)),
+             "plant": {"site": "A", "x": 1000, "y": 1000, "t": 44.0}},
+        ]),
+    ]
+    profile = build_profile("de_mirage", players)
+    assert profile["teamPlants"]["rounds"] == 2
+    assert profile["teamPlants"]["B"] == 1
+    assert profile["teamPlants"]["A"] == 1
+    assert profile["teamPlants"]["avgT"] == 42.0

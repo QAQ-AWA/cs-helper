@@ -118,11 +118,10 @@ def build_evidence(
         return "我方" if side == my_side else "对方"
 
     rows: list[dict[str, Any]] = []
-    for index, player in enumerate(players, start=1):
+    for player in players:
         stats = player.get("stats") or {}
         rows.append(
             {
-                "id": f"p{index}",
                 "name": player.get("nickname") or "Unknown",
                 "side": player.get("team") or "",
                 "role": role_for(player.get("team") or ""),

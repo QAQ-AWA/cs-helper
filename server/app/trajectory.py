@@ -213,9 +213,32 @@ def build_profile(
     profiles = [item for item in profiles if item["rounds"]]
     total_rounds = sum(item["rounds"] for item in profiles)
 
+    # 同一个下包会出现在每个被解析选手的回合里，横向相加会重复计数；
+    # 队伍级的次数必须按 round_id 去重后再统计。
+    team_plants: dict[int, dict[str, Any]] = {}
+    for player in players:
+        for item in (player.get("replay") or {}).get("rounds") or []:
+            plant = item.get("plant") or {}
+            round_id = item.get("round_id")
+            if plant.get("site") in {"A", "B"} and round_id is not None:
+                team_plants.setdefault(int(round_id), plant)
+
+    sites = [plant.get("site") for plant in team_plants.values()]
+    times = [
+        float(plant["t"])
+        for plant in team_plants.values()
+        if isinstance(plant.get("t"), (int, float))
+    ]
+
     return {
         "map": map_name,
         "rounds": total_rounds,
+        "teamPlants": {
+            "rounds": len(team_plants),
+            "A": sites.count("A"),
+            "B": sites.count("B"),
+            "avgT": round(statistics.mean(times), 1) if times else None,
+        },
         "players": profiles,
         "siteAnchors": anchors or None,
         "siteKnown": sorted(anchors) if anchors else [],
