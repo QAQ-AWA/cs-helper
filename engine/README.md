@@ -51,17 +51,26 @@ cd engine && python -m pytest tests -v
 
 ## 地图资源
 
-解析和回放都需要 `data/maps/<map>/{radar.png,meta.json}`（坐标变换 + 雷达底图），仓库不附带。两种来源：
+解析和回放都需要 `data/maps/<map>/{radar.png,meta.json}`（坐标变换 + 雷达底图），仓库不附带（Valve 素材，且体积大）。
 
 ```bash
-# A. 官方雷达图（需要 awpy，CDN 偶尔 403）
-pip install awpy==2.0.2
-awpy get maps
-python setup_maps.py
+# A. 从本机 CS2 提取变换（推荐）：变换直接读 pak01_dir.vpk 里的
+#    resource/overviews/<map>.txt，图片用任意 1024×1024 的 <map>.png
+python import_radar.py --from-vpk "F:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive/game" \
+                       --png-dir D:/radars
 
-# B. 离线：从 pak01.vpk 解包出 resource/overviews 后导入
+# B. png + txt 在同一目录
 python import_radar.py --from-dir D:/overviews
+
+# C. 官方打包（awpy 的 CDN 常被 Cloudflare 拦，见下）
+pip install -r requirements-maps.txt && awpy get maps && python setup_maps.py
 ```
+
+已知事实（2026-10 实测）：
+
+- `awpy get maps` 请求 `awpycs.com/<patch>/maps.zip` 会被 Cloudflare 返回 **403**，代理直连都一样，属 IP 段级别拦截。
+- CS2 的资源已打进 `pak01_dir.vpk`：里面**只有** `resource/overviews/*.txt`（变换），雷达图是编译后的 `materials/*_radar_color_tga_*.vtex_c`，需要 VTEX 解码，所以图片必须另有来源。
+- `import_radar.py --from-vpk` 就是为了这种情况：变换取官方值（`de_mirage` = -3230 / 1713 / 5.0），图片你自己给。
 
 缺少资源时服务端会直接回 `ROOM_ERROR 2002`，不会跑到一半才失败。
 

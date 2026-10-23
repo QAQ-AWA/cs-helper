@@ -11,7 +11,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 | [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
 | [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ P2（45 tests） |
 | [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
-| [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（101 tests） |
+| [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（104 tests） |
 | [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
 | [`tools/`](tools/) | 端到端冒烟脚本 | Python | ✅ |
 | [`docs/`](docs/) | 架构与路线图 | Markdown | ✅ |
@@ -67,6 +67,14 @@ npm run build:exe    # 出单文件 exe（src-tauri/target/release/）
 
 在客户端的同步设置里把服务端地址填成 `http://<IP>:8787` 即可接入房间。
 
+### 地图资源（回放必需）
+
+```bash
+cd engine && python import_radar.py --from-vpk "<CS2>/game" --png-dir <1024px 雷达图目录>
+```
+
+变换直接读 CS2 的 `pak01_dir.vpk`；`awpy get maps` 的 CDN 当前被 Cloudflare 拦截。详见 [engine/README.md](engine/README.md)。
+
 ### 解析引擎（独立使用）
 
 ```bash
@@ -79,7 +87,7 @@ cd engine && python -m pytest tests -q
 | 套件 | 命令 | 结果 |
 | --- | --- | --- |
 | 服务端 | `cd server && pytest tests -q` | 38 passed |
-| 引擎 | `cd engine && pytest tests -q` | 101 passed, 10 skipped（缺 328MB 集成样本） |
+| 引擎 | `cd engine && pytest tests -q` | 104 passed, 10 skipped（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | 284 passed |
 | 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |
 

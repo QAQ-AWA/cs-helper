@@ -124,14 +124,13 @@ Demo 任务用真实 `engine/job_runner.py` 验证过子进程链路（进度行
 ### 地图资源（回放的前置条件）
 
 ```bash
-# A. 官方雷达图（awpy 的 CDN 偶尔返回 403，失败就用 B）
-pip install -r engine/requirements-maps.txt
-engine/.venv/Scripts/awpy get maps      # 或在已激活的环境里直接 awpy get maps
-cd engine && python setup_maps.py
-
-# B. 离线：已有 resource/overviews 的 png+txt（可从 pak01.vpk 解包）
-cd engine && python import_radar.py --from-dir D:/overviews
+# 变换直接读本机 CS2 的 pak01_dir.vpk，图片用 1024×1024 的 <map>.png
+cd engine
+python import_radar.py --from-vpk "F:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive/game" \
+                       --png-dir D:/radars
 ```
+
+`awpy get maps` 的 CDN（awpycs.com）目前被 Cloudflare 返回 403，`import_radar.py` 就是给这种情况用的：变换取官方值，图片由你提供。详见 `engine/README.md`。
 
 没有 `data/maps/<map>/{radar.png,meta.json}` 时，解析任务会在开始时返回 `ROOM_ERROR 2002`，不会跑一半才失败；手机端回放会画网格占位而不是白屏。
 
