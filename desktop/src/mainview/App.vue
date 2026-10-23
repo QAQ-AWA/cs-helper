@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
+import { defineAsyncComponent, onMounted, ref, watch } from 'vue';
 import { MotionConfig } from 'motion-v';
 import CopyToast from './components/CopyToast.vue';
 import CloseConfirmDialog from './components/CloseConfirmDialog.vue';
@@ -18,7 +18,6 @@ import SettingsView, { type SettingsTab } from './views/SettingsView.vue';
 import { startupMark } from './utils/startup-metrics';
 import { requestMatchAttention } from './native';
 import { localize as l } from './i18n';
-import { buildAiDebugFixture } from '@core/ai/analysis-v2';
 
 startupMark('app setup start');
 
@@ -43,7 +42,7 @@ function flashTaskbarForNewMatch() {
 }
 
 const logWatcher = useLogWatcher({ autoInit: false, onNewMatch: flashTaskbarForNewMatch });
-const { matches, logEntries, clearLogEntries, watcher, injectMatch, replayPerfectFixture, ensureListeners, startWatching, stopWatching } =
+const { matches, logEntries, clearLogEntries, watcher, injectMatch, replayPerfectFixture, ensureListeners, stopWatching } =
   logWatcher;
 
 const matchHistory = useMatchHistory();
@@ -114,7 +113,6 @@ const {
   state: updateState,
   isBusy: updateBusy,
   ensureVersion,
-  check,
   openDialog,
   closeDialog,
   retryDownload,
@@ -229,7 +227,6 @@ function onBackFromP5e() {
       :inject-match="injectMatch"
       :replay-perfect-fixture="replayPerfectFixture"
       :inject-ai-result="injectAiResult"
-      :get-ai-v3-fixture="getAiV3Fixture"
       :p5e="p5e"
       :log-entries="logEntries"
       :watcher="watcher"
@@ -273,7 +270,7 @@ function onBackFromP5e() {
             :active="currentView === 'main'"
             :p5e="p5e"
             :history="matchHistory"
-            @open-settings="openSettings('ai')"
+            @open-settings="openSettings()"
             @back="onBackToP5eLaunch"
           />
         </Transition>
@@ -287,8 +284,6 @@ function onBackFromP5e() {
           v-if="currentView === 'settings'"
           ref="settingsViewRef"
           class="h-full"
-          :ai="ai"
-          :comments="comments"
           :history="matchHistory"
           :initial-tab="settingsTab"
           :visible="true"

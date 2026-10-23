@@ -72,7 +72,9 @@ async function loadSnapshot() {
     const snapshot = await getJson(`/api/v1/room/${encodeURIComponent(settings.roomCode)}/snapshot`);
     const artifact = snapshot?.match?.artifactId;
     if (!artifact) return;
-    applyIndex(await getJson(`/api/v1/artifacts/${artifact}`));
+    // 索引响应体里没有 artifactId（它在 URL 上），不补回去的话列表能显示、
+    // 点选手却什么都不发生——重连后正是走这条路径。
+    applyIndex({ ...(await getJson(`/api/v1/artifacts/${artifact}`)), artifactId: artifact });
   } catch (error) {
     status.value = 'error';
     message.value = error instanceof Error ? error.message : '加载失败';
@@ -156,8 +158,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 gap-3 p-3">
-    <aside class="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto">
-      <p v-if="!players.length" class="px-1 text-xs text-slate-500">{{ message }}</p>
+    <aside class="flex w-48 shrink-0 flex-col gap-1 overflow-y-auto">
+      <p v-if="!players.length" class="px-1 text-xs text-fg-muted">{{ message }}</p>
       <button
         v-for="player in players"
         :key="player.steamId"
@@ -165,26 +167,26 @@ onBeforeUnmount(() => {
         class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors"
         :class="
           activeSteam === player.steamId
-            ? 'bg-white text-emerald-600 shadow-sm'
-            : 'text-slate-600 hover:bg-white/60'
+            ? 'bg-surface text-accent shadow-sm'
+            : 'text-fg-secondary hover:bg-elevated'
         "
         @click="openPlayer(player)"
       >
         <span class="min-w-0 flex-1 truncate">{{ displayName(player) }}</span>
-        <span class="shrink-0 text-[10px] text-slate-400">{{ player.rounds }} 回合</span>
+        <span class="shrink-0 text-[10px] text-fg-muted">{{ player.rounds }} 回合</span>
       </button>
     </aside>
 
     <section class="flex min-w-0 flex-1 flex-col">
-      <div v-if="!activeSteam" class="grid min-h-0 flex-1 place-items-center rounded bg-slate-50 text-xs text-slate-400">
+      <div v-if="!activeSteam" class="grid min-h-0 flex-1 place-items-center rounded bg-elevated text-xs text-fg-muted">
         选择左侧选手查看开局习惯轨迹
       </div>
       <template v-else>
         <div class="mb-2 flex flex-wrap items-center gap-1.5">
-          <span class="mr-auto truncate text-xs font-medium text-slate-600">{{ activeName }}</span>
+          <span class="mr-auto truncate text-xs font-medium text-fg-secondary">{{ activeName }}</span>
           <button
             type="button"
-            class="rounded bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white"
+            class="rounded bg-accent px-2.5 py-1 text-xs font-medium text-white"
             @click="togglePlay"
           >
             {{ playing ? '暂停' : '播放' }}
@@ -194,7 +196,7 @@ onBeforeUnmount(() => {
             :key="value"
             type="button"
             class="rounded px-2 py-1 text-xs"
-            :class="speed === value ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'"
+            :class="speed === value ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted'"
             @click="setSpeed(value)"
           >
             {{ value }}x
@@ -204,19 +206,19 @@ onBeforeUnmount(() => {
             :key="value || 'all'"
             type="button"
             class="rounded px-2 py-1 text-xs"
-            :class="side === value ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'"
+            :class="side === value ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted'"
             @click="setSide(value)"
           >
             {{ value || '全部' }}
           </button>
         </div>
         <canvas ref="canvasRef" class="min-h-0 w-full flex-1 rounded bg-slate-900" />
-        <div class="mt-2 h-1 w-full overflow-hidden rounded bg-slate-200">
-          <div class="h-full bg-emerald-500 transition-[width] duration-75" :style="{ width: `${progress * 100}%` }" />
+        <div class="mt-2 h-1 w-full overflow-hidden rounded bg-border">
+          <div class="h-full bg-accent transition-[width] duration-75" :style="{ width: `${progress * 100}%` }" />
         </div>
-        <p v-if="status === 'error'" class="mt-1 text-xs text-rose-500">{{ message }}</p>
-        <p v-else-if="status === 'loading'" class="mt-1 text-xs text-slate-400">{{ message }}</p>
-        <p v-else class="mt-1 text-[11px] text-slate-400">
+        <p v-if="status === 'error'" class="mt-1 text-xs text-danger">{{ message }}</p>
+        <p v-else-if="status === 'loading'" class="mt-1 text-xs text-fg-muted">{{ message }}</p>
+        <p v-else class="mt-1 text-[11px] text-fg-muted">
           <Route class="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
           路径越集中，说明该选手的开局习惯越固定；{{ canRender ? '' : '未连接服务端' }}
         </p>

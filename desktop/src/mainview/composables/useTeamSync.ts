@@ -2,6 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { teamSyncClient } from '@core/sync/sync-client';
 import type { SyncSettings, SyncStatus } from '@core/sync/types';
 import type { MatchRecord } from '@core/match/models';
+import type { P5ePostMatchReport } from '@platforms/5e/post-match';
 
 /** The slice of the relay's session that the desktop renders. */
 export interface ServerMatchView {
@@ -19,6 +20,7 @@ export interface ServerMatchView {
   aiText?: string | null;
   tacticsState?: string;
   tacticsText?: string | null;
+  postReport?: P5ePostMatchReport | null;
   createdAt?: number;
   updatedAt?: number;
 }

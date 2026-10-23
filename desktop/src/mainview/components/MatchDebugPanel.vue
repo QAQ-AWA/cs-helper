@@ -40,7 +40,6 @@ const props = withDefaults(
     logEntries?: DebugLogEntry[];
     watcher?: WatcherStatus;
     injectAiResult?: (raw: string) => Promise<string | null>;
-    getAiV3Fixture?: () => string | null;
     replayPerfectFixture?: () => Promise<void>;
     p5e?: ReturnType<typeof useP5eCdp>;
     comments?: ReturnType<typeof useComments>;
@@ -58,7 +57,6 @@ const props = withDefaults(
       linesReceived: 0,
     }),
     injectAiResult: undefined,
-    getAiV3Fixture: undefined,
   },
 );
 
@@ -300,7 +298,7 @@ async function submitAi() {
 }
 
 function fillAiV3Fixture() {
-  const fixture = props.getAiV3Fixture?.();
+  const fixture = undefined;
   if (!fixture) {
     aiError.value = l('请先注入或接收一条匹配数据', 'Inject or receive match data first');
     return;

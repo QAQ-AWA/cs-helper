@@ -12,6 +12,7 @@
  */
 import { createApp, h, ref } from 'vue';
 import '../index.css';
+import { teamSyncClient } from '@core/sync/sync-client';
 import MatchWorkspace from '../components/MatchWorkspace.vue';
 import ServerRoomPanel from '../components/ServerRoomPanel.vue';
 
@@ -93,8 +94,33 @@ function makeMatch(state: Scenario) {
   return { ...base, aiText: AI_TEXT, tacticsText: TACTICS_TEXT };
 }
 
+const POST_REPORT = {
+  matchCode: '2603231600001',
+  mapName: 'de_mirage',
+  roundTotal: 24,
+  status: 1,
+  isFinished: true,
+  winnerSide: 'A',
+  scoreA: 13,
+  scoreB: 11,
+  halfScores: { fhA: 8, shA: 5, fhB: 4, shB: 7 },
+  demoUrl: 'https://example.invalid/demo.zip',
+  players: [
+    { uid: 'a1', nickname: '半团空气', teamSide: 1, kill: 24, death: 16, assist: 5, rating: 1.32, adr: 96, isMvp: true, isSvp: false },
+    { uid: 'a2', nickname: '背身步马枪', teamSide: 1, kill: 18, death: 18, assist: 7, rating: 1.05, adr: 78, isMvp: false, isSvp: false },
+    { uid: 'b1', nickname: 'Z大爷', teamSide: 2, kill: 26, death: 17, assist: 3, rating: 1.28, adr: 104, isMvp: false, isSvp: true },
+    { uid: 'b2', nickname: 'Farewell-海海', teamSide: 2, kill: 14, death: 20, assist: 6, rating: 0.92, adr: 71, isMvp: false, isSvp: false },
+  ],
+  comparison: { isCorrect: true, headline: 'AI 预判 CT 更被看好，命中' },
+  fetchedAt: Date.now(),
+};
+
 const sync = {
-  serverMatch: ref(makeMatch(scenario)),
+  serverMatch: ref(
+    tab === 'post' && scenario !== 'empty'
+      ? { ...(makeMatch(scenario) as object), postReport: POST_REPORT }
+      : makeMatch(scenario),
+  ),
   serverProfiles: ref(scenario === 'empty' ? [] : PROFILES),
   aiStreamChunk: ref(''),
   tacticsStream: ref(''),
@@ -160,10 +186,36 @@ const MATCH_RECORD = {
   },
 };
 
-createApp({
-  // Fixture only: the real composable carries more methods than the panel reads.
-  render: () =>
-    view === 'workspace'
-      ? h(MatchWorkspace, { match: MATCH_RECORD as never, sync: sync as never, initialTab: tab as never })
-      : h(ServerRoomPanel, { sync: sync as never }),
-}).mount('#app');
+async function bootstrap() {
+  // ?live=1 时连本机服务端，用真实房间数据（雷达图走 vite 代理）。
+  if (params.get('live') === '1') {
+    try {
+      const res = await fetch('http://127.0.0.1:8787/api/v1/room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: '预览', deviceType: 'pc' }),
+      });
+      const json = await res.json();
+      if (json?.code === 0) {
+        teamSyncClient.updateSettings({
+          enabled: true,
+          serverUrl: 'http://127.0.0.1:8787',
+          roomCode: json.data.roomCode,
+          token: json.data.token,
+        });
+      }
+    } catch {
+      // 服务端没起就退回 fixture
+    }
+  }
+
+  createApp({
+    // Fixture only: the real composable carries more methods than the panel reads.
+    render: () =>
+      view === 'workspace'
+        ? h(MatchWorkspace, { match: MATCH_RECORD as never, sync: sync as never, initialTab: tab as never })
+        : h(ServerRoomPanel, { sync: sync as never }),
+  }).mount('#app');
+}
+
+void bootstrap();

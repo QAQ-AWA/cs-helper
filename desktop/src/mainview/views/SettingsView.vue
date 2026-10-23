@@ -1,26 +1,20 @@
 <script setup lang="ts">
-import { History, Info, MessageCircle, ScrollText, Settings, Sparkles, Users } from 'lucide-vue-next';
+import { History, Info, ScrollText, Settings, Users } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { useAiAnalysis } from '../composables/useAiAnalysis';
-import type { useComments } from '../composables/useComments';
 import type { MatchHistoryApi } from '../composables/useMatchHistory';
 import AboutSettingsSection from '../components/settings/AboutSettingsSection.vue';
-import AiSettingsSection from '../components/settings/AiSettingsSection.vue';
 import ChangelogSettingsSection from '../components/settings/ChangelogSettingsSection.vue';
-import CommentHistorySection from '../components/settings/CommentHistorySection.vue';
 import TeamSyncSettingsSection from '../components/settings/TeamSyncSettingsSection.vue';
 import SettingsLanguageMenu from '../components/settings/SettingsLanguageMenu.vue';
 import MatchHistoryView from './MatchHistoryView.vue';
 import { useDebugUnlock } from '../composables/useDebugUnlock';
 
-export type SettingsTab = 'history' | 'sync' | 'ai' | 'comments' | 'changelog' | 'about';
+export type SettingsTab = 'history' | 'sync' | 'changelog' | 'about';
 
 const { t } = useI18n();
 
 const props = defineProps<{
-  ai: ReturnType<typeof useAiAnalysis>;
-  comments: ReturnType<typeof useComments>;
   history: MatchHistoryApi;
   initialTab?: SettingsTab;
   visible?: boolean;
@@ -39,8 +33,6 @@ watch(
 const navItems = computed(() => [
   { id: 'history' as const, label: t('settings.history'), desc: t('settings.historyDesc'), icon: History },
   { id: 'sync' as const, label: '小队协同', desc: '局域网/云端中枢与手机副屏连接设置', icon: Users },
-  { id: 'ai' as const, label: t('settings.ai'), desc: t('settings.aiDesc'), icon: Sparkles },
-  { id: 'comments' as const, label: t('settings.comments'), desc: t('settings.commentsDesc'), icon: MessageCircle },
   { id: 'changelog' as const, label: t('settings.changelog'), desc: t('settings.changelogDesc'), icon: ScrollText },
   { id: 'about' as const, label: t('settings.about'), desc: t('settings.aboutDesc'), icon: Info },
 ]);
@@ -131,17 +123,8 @@ defineExpose({ goBack });
 
         <div class="relative mx-auto w-full max-w-3xl flex-1 px-6 py-6">
           <Transition name="settings-tab" mode="out-in">
-            <div v-if="activeTab === 'ai'" key="ai">
-              <AiSettingsSection :ai="ai" :settings-visible="visible ?? true" />
-            </div>
-            <div v-else-if="activeTab === 'sync'" key="sync">
+            <div v-if="activeTab === 'sync'" key="sync">
               <TeamSyncSettingsSection />
-            </div>
-            <div v-else-if="activeTab === 'comments'" key="comments">
-              <CommentHistorySection
-                :comments="comments"
-                :visible="(visible ?? true) && activeTab === 'comments'"
-              />
             </div>
             <div v-else-if="activeTab === 'changelog'" key="changelog">
               <ChangelogSettingsSection />
@@ -161,9 +144,8 @@ defineExpose({ goBack });
           ref="matchHistoryViewRef"
           class="h-full"
           :history="history"
-          :comments="comments"
           :visible="activeTab === 'history'"
-          @open-settings="selectTab('ai')"
+          
         />
       </div>
     </div>

@@ -36,6 +36,11 @@ export default defineConfig({
   server: {
     strictPort: true,
     port: 5173,
+    // 预览页里雷达图是服务端路径（/maps/...），开发时转发过去，
+    // 这样不启动 Tauri 也能看到真实轨迹。
+    proxy: {
+      '/maps': 'http://127.0.0.1:8787',
+    },
     fs: {
       // 允许读取仓库根下的 server/static
       allow: [rootDir, path.resolve(rootDir, '..')],

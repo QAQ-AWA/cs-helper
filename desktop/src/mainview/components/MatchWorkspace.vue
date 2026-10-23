@@ -7,7 +7,7 @@ import { useMatchCountdown } from '../composables/useMatchCountdown';
 import RosterBoard from './RosterBoard.vue';
 import ServerAnalysisPanel from './ServerAnalysisPanel.vue';
 import TacticalPathsPanel from './TacticalPathsPanel.vue';
-import P5ePostMatchPanel from './P5ePostMatchPanel.vue';
+import PostMatchBoard from './PostMatchBoard.vue';
 
 /**
  * One match, four questions: who is playing, what does the relay think, where
@@ -53,6 +53,9 @@ const sideLabel = computed(() => {
 const roomCode = computed(() => props.sync?.settings.value.roomCode ?? '');
 
 const hasAnalysis = computed(() => Boolean(props.sync?.serverMatch.value));
+const postReport = computed(
+  () => props.sync?.serverMatch.value?.postReport ?? props.initialPostMatch ?? null,
+);
 </script>
 
 <template>
@@ -117,10 +120,10 @@ const hasAnalysis = computed(() => Boolean(props.sync?.serverMatch.value));
         历史回放不包含服务端分析
       </div>
       <TacticalPathsPanel v-else-if="activeTab === 'paths'" />
-      <P5ePostMatchPanel
+      <PostMatchBoard
         v-else
         :match="match"
-        :initial-report="initialPostMatch ?? null"
+        :report="postReport"
         :history-mode="historyMode"
         @report-updated="(report) => emit('postMatchUpdated', report)"
       />
