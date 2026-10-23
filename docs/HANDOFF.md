@@ -244,7 +244,17 @@ MatchWorkspace
 
 实时视图与历史回放都走 `MatchWorkspace`；历史回放没有 `sync`，分析页显示「历史回放不包含服务端分析」。
 
-**待办**：轨迹页与赛后页仍是旧组件（`TacticalPathsPanel` / `P5ePostMatchPanel`），视觉语言与新面板还不统一。
+**第二轮（同一轮内完成）**：
+
+- 赛后页 `P5ePostMatchPanel`（605 行）→ `PostMatchBoard`（约 200 行）：展示服务端 `postReport`，
+  本地拉取后一边渲染一边 `reportPostMatch` 上报。**注意**：上一轮删旧面板时把上报调用一起删了，
+  战报再也到不了服务端，新面板已接回。
+- 轨迹页：`slate/emerald` 换成主题 token；修「从快照恢复时点选手没反应」——
+  索引响应体里没有 `artifactId`（它在 URL 上），不补回去 `openPlayer` 会直接 return。
+- 设置页：去掉「AI 设置」「留言板」两个页签，AI 已由服务端负责。
+- `vite.config.ts` 加 `/maps` 代理，预览页可直接看真实雷达（`?live=1` 连本机 8787）。
+
+主包 842KB（重写前）→ 486KB（换面板）→ **417KB**（去设置页 AI/留言板）。
 
 
 ### 0.3 数据从哪来（签名网关）
