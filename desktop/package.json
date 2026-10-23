@@ -16,6 +16,7 @@
     "build:frontend": "vite build",
     "icon": "tauri icon src/mainview/assets/icons/app-icon.svg && cargo build --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
     "audit:product-boundary": "node scripts/product-boundary-audit.mjs",
     "test:watch": "vitest",
     "preview": "vite preview"

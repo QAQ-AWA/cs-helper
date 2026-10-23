@@ -267,7 +267,6 @@ onMounted(() => {
             :match="detailVm.record"
             :ai="detailAi"
             :comments="comments"
-            :viewer-steam-id="detailVm.document.platformId === 'perfect' ? viewerSteamId : undefined"
             :initial-post-match="detailVm.postMatch"
             @open-settings="emit('openSettings')"
             @post-match-updated="onPostMatchUpdated"

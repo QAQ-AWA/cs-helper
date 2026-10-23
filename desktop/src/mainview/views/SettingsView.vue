@@ -162,7 +162,6 @@ defineExpose({ goBack });
           class="h-full"
           :history="history"
           :comments="comments"
-          :viewer-steam-id="viewerSteamId"
           :visible="activeTab === 'history'"
           @open-settings="selectTab('ai')"
         />

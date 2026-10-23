@@ -30,7 +30,8 @@ import { resolveSelfSide, sideRelationshipLabel, type AiSide } from '@core/ai/pe
 const props = defineProps<{
   match: MatchRecord;
   ai: ReturnType<typeof useAiAnalysis>;
-  sync: ReturnType<typeof useTeamSync>;
+  /** Absent in history replay, where there is no live relay session. */
+  sync?: ReturnType<typeof useTeamSync>;
   comments: ReturnType<typeof useComments>;
   active?: boolean;
   /** 历史回看：不触发 AI、不显示准备倒计时 */
@@ -688,7 +689,14 @@ function eloCompareTitle(
           @report-updated="onPostMatchUpdated"
         />
         <TacticalPathsPanel v-else-if="activeTab === 'paths'" key="paths" />
-        <ServerAnalysisPanel v-else key="ai" :sync="sync" />
+        <ServerAnalysisPanel v-else-if="sync" key="ai" :sync="sync" />
+        <div
+          v-else
+          key="ai-empty"
+          class="flex h-full items-center justify-center text-sm text-fg-muted"
+        >
+          历史回放不包含服务端分析
+        </div>
       </Transition>
     </div>
     </div>
