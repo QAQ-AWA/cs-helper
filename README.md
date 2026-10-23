@@ -9,7 +9,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 | 目录 | 内容 | 技术栈 | 状态 |
 | --- | --- | --- | --- |
 | [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报、习惯轨迹 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
-| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ 可用（55 tests） |
+| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ 可用（58 tests） |
 | [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
 | [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（104 tests） |
 | [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
@@ -96,7 +96,7 @@ cd engine && python -m pytest tests -q
 
 | 套件 | 命令 | 结果 |
 | --- | --- | --- |
-| 服务端 | `cd server && pytest tests -q` | 55 passed |
+| 服务端 | `cd server && pytest tests -q` | 58 passed |
 | 引擎 | `cd engine && pytest tests -q` | 104 passed, 10 skipped（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | 284 passed |
 | 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |

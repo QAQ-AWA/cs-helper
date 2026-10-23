@@ -248,3 +248,46 @@ def test_subprocess_runner_parses_child_stream(tmp_path):
     assert outcome.error is None
     assert outcome.players[0]["rounds"] == 2
     assert outcome.players[0]["replay"]["steamid"] == "76561198000000002"
+
+
+def test_artifact_index_falls_back_to_roster_nickname(monkeypatch, tmp_path):
+    """The engine may report an empty username (cache hit, synthetic job).
+
+    The index still has to carry a human-readable name, otherwise the phone
+    shows raw SteamID64 strings and nobody can tell who is who.
+    """
+
+    monkeypatch.setattr(app_settings, "maps_ready", lambda name: True)
+    monkeypatch.setattr(app_settings, "job_dir", lambda session_id: tmp_path / session_id)
+    outcome = DemoOutcome(
+        players=[
+            {
+                "username": None,
+                "domain": "player_a",
+                "steamId": "76561198000000002",
+                "rounds": 1,
+                "bytes": 10,
+                "replay": {
+                    "username": None,
+                    "steamid": "76561198000000002",
+                    "round_count": 1,
+                    "rounds": [],
+                },
+            }
+        ]
+    )
+    app = create_app(
+        secret="test-secret", room_ttl=600, demo_runner=FakeRunner(outcome), room_mode="multi"
+    )
+    with TestClient(app) as client:
+        room = _room(client)
+        assert _report(client, room).json()["code"] == 0
+        data = _wait(client, room, lambda match: match.get("demoState") == "ready")
+        bundle = client.get(
+            f"/api/v1/artifacts/{data['match']['artifactId']}",
+            headers={"Authorization": f"Bearer {room['token']}"},
+        ).json()["data"]
+
+    player = bundle["players"][0]
+    assert player["username"] is None
+    assert player["nickname"] == "Alpha"

@@ -82,7 +82,17 @@ function connect() {
     }
     handle(msg.action, msg.payload || {});
   };
-  ws.onclose = () => {
+  ws.onclose = (event) => {
+    // 4401: the token outlived its member (server restart / room reset).
+    // Reconnecting with it forever would just spin, so ask for the nickname again.
+    if (event && event.code === 4401) {
+      state.token = null;
+      localStorage.removeItem(storeKeyFor(roomCode));
+      setConn('', '房间已重置');
+      $('join').classList.remove('hidden');
+      showErr('房间已重置，请重新输入昵称进入');
+      return;
+    }
     setConn('', '已断开');
     const delay = Math.min(15000, 800 * Math.pow(1.7, state.retry++));
     setTimeout(connect, delay + Math.random() * 400);
@@ -98,13 +108,15 @@ function handle(action, payload) {
       }
       renderMembers(payload.members || []);
       if (payload.match) {
-        renderMatch(payload.match);
+        const roster = payload.profiles && payload.profiles.length ? { players: payload.profiles } : null;
+        renderMatch(payload.match, roster);
         if (payload.match.aiText) {
           $('ai-card').classList.remove('hidden');
           $('ai').textContent = payload.match.aiText;
         }
         if (payload.match.postReport) renderPostMatch(payload.match.postReport);
         if (payload.match.artifactId && !state.paths) loadPaths(payload.match.artifactId);
+        else if (state.paths) renderPaths(state.paths);
       }
       break;
     case 'ROOM_MEMBERS_CHANGED':
@@ -153,13 +165,13 @@ function renderMembers(members) {
     box.innerHTML = '<span class="muted">暂无</span>';
     return;
   }
+  // Only the first PC owns the room; other desktops are just probes.
+  const host = members.find((m) => m.deviceType === 'pc');
   box.innerHTML = members
-    .map(
-      (m) =>
-        `<span class="chip ${m.isOnline ? '' : 'off'}">${escapeHtml(m.nickname)}${
-          m.deviceType === 'pc' ? ' · 房主' : ''
-        }</span>`,
-    )
+    .map((m) => {
+      const tag = host && m.id === host.id ? ' · 房主' : m.deviceType === 'pc' ? ' · 电脑' : '';
+      return `<span class="chip ${m.isOnline ? '' : 'off'}">${escapeHtml(m.nickname)}${tag}</span>`;
+    })
     .join('');
 }
 
@@ -178,7 +190,7 @@ function renderMatch(match, profile) {
     players.filter((p) => p.team === 't').map(playerRow).join('') || '<div class="muted">—</div>';
   if (profile) {
     state.profilePlayers = players;
-    $('profile-source').textContent = '数据来源：电脑端上报，服务端待补全';
+    $('profile-source').textContent = '数据来自队友电脑端上报';
   }
 }
 
@@ -220,21 +232,39 @@ function renderPaths(payload) {
   }
   $('paths-card').classList.remove('hidden');
   box.innerHTML = players
-    .map(
-      (p) => `<button class="path-row" data-steam="${escapeAttr(p.steamId)}" data-name="${escapeAttr(
-        p.username || '',
-      )}">
-        <span class="name">${escapeHtml(p.username || p.steamId)}</span>
+    .map((p) => {
+      const name = displayName(p);
+      const teammate = teammateFor(p);
+      const avatar = teammate && teammate.avatarUrl
+        ? `<span class="ava"><img src="${escapeAttr(teammate.avatarUrl)}" alt="" loading="lazy" onerror="this.remove()" /></span>`
+        : `<span class="ava">${escapeHtml(name.slice(0, 1))}</span>`;
+      const side = teammate ? `<span class="side ${teammate.team}">${teammate.team === 'ct' ? 'CT' : 'T'}</span>` : '';
+      return `<button class="path-row" data-steam="${escapeAttr(p.steamId)}" data-name="${escapeAttr(name)}">
+        ${avatar}
+        <span class="name">${escapeHtml(name)}${side}</span>
         <span class="muted">${p.rounds || 0} 回合</span>
         <span class="go">查看 ›</span>
-      </button>`,
-    )
+      </button>`;
+    })
     .join('');
   box.querySelectorAll('.path-row').forEach((button) => {
     button.addEventListener('click', () =>
       openPlayer(button.dataset.steam, button.dataset.name),
     );
   });
+}
+
+/** Roster entry for a steamId, so we can reuse its nickname/avatar/team. */
+function teammateFor(player) {
+  const roster = state.profilePlayers || [];
+  const steamId = String(player.steamId || '');
+  return roster.find(
+    (p) => String(p.steamId || '') === steamId || (player.domain && p.platformUserId === player.domain),
+  );
+}
+
+function displayName(player) {
+  return player.nickname || player.username || teammateFor(player)?.nickname || String(player.steamId || '');
 }
 
 function renderPostMatch(report) {
@@ -295,10 +325,11 @@ async function openPlayer(steamId, username) {
   state.artifactId = state.paths?.artifactId || state.artifactId;
   $('view-room').classList.add('hidden');
   $('view-player').classList.remove('hidden');
-  $('back').classList.remove('hidden');
+  document.body.classList.add('player-mode');
   $('p-name').textContent = username || steamId;
   $('p-stats').textContent = '加载轨迹…';
   $('p-rounds').textContent = '';
+  $('progress-bar').style.width = '0%';
 
   let replay = state.replayCache.get(steamId);
   if (!replay) {
@@ -348,7 +379,8 @@ function closePlayer() {
   state.currentSteamId = null;
   $('view-player').classList.add('hidden');
   $('view-room').classList.remove('hidden');
-  $('back').classList.add('hidden');
+  document.body.classList.remove('player-mode');
+  $('progress-bar').style.width = '0%';
 }
 
 function fmt(value) {

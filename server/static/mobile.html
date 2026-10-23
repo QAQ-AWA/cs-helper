@@ -12,7 +12,6 @@
 </head>
 <body>
 <header>
-  <button id="back" class="back hidden" aria-label="返回">←</button>
   <div class="code" id="code">----</div>
   <div class="muted" id="hint">连接中…</div>
   <div class="dot" id="dot"></div>
@@ -60,7 +59,8 @@
 
 <section id="view-player" class="hidden">
   <div class="player-head">
-    <div>
+    <button id="back" class="back" aria-label="返回">←</button>
+    <div class="player-meta">
       <b id="p-name">选手</b>
       <div class="muted" id="p-stats"></div>
     </div>

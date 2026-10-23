@@ -85,7 +85,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 57 passed（含 node 无头渲染测试）
+cd server && python -m pytest tests -q     # 58 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。

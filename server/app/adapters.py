@@ -68,3 +68,26 @@ def demo_job_targets(report: dict[str, Any]) -> list[str]:
     """Nicknames handed to the engine, in the same order as ``to_engine_hints``."""
 
     return [player["nickname"] for player in normalise_players(report)]
+
+
+def nickname_index(report: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Map steamId and 5E domain back to the display nickname.
+
+    The engine reports whatever ``username`` it was given, which is empty for
+    synthesized or partially-matched jobs. The artifact index must still be
+    readable on the phone, so we re-attach the nickname from the roster here.
+    """
+
+    by_steam: dict[str, str] = {}
+    by_domain: dict[str, str] = {}
+    for player in normalise_players(report):
+        nickname = (player.get("nickname") or "").strip()
+        if not nickname:
+            continue
+        steam_id = (player.get("steamId") or "").strip()
+        domain = (player.get("platformUserId") or "").strip()
+        if steam_id:
+            by_steam.setdefault(steam_id, nickname)
+        if domain:
+            by_domain.setdefault(domain, nickname)
+    return by_steam, by_domain

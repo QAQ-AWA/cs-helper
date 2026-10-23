@@ -299,10 +299,23 @@ class JobManager:
             )
             return
 
+        nick_by_steam, nick_by_domain = adapters.nickname_index(session.report)
+
+        def display_name(item: dict[str, Any]) -> str:
+            steam_id = str(item.get("steamId") or "")
+            domain = str(item.get("domain") or "")
+            return (
+                nick_by_steam.get(steam_id)
+                or nick_by_domain.get(domain)
+                or (item.get("username") or "")
+                or steam_id
+            )
+
         players = [
             {
                 "steamId": item.get("steamId"),
                 "username": item.get("username"),
+                "nickname": display_name(item),
                 "domain": item.get("domain"),
                 "rounds": item.get("rounds", 0),
                 "bytes": item.get("bytes", 0),
@@ -320,6 +333,7 @@ class JobManager:
                 {
                     "steamId": steam_id,
                     "username": item.get("username"),
+                    "nickname": display_name(item),
                     "domain": item.get("domain"),
                     "replay": item.get("replay"),
                 },

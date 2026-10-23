@@ -50,6 +50,7 @@ def build_synthetic_artifact(session: Any, players: list[dict[str, Any]]) -> tup
 
     for index, player in enumerate(players):
         steam_id = str(player.get("steamId") or f"dev{index}")
+        display = player.get("nickname") or player.get("username") or steam_id
         rounds: list[dict[str, Any]] = []
         for number in range(ROUNDS_PER_PLAYER):
             side = "CT" if number < ROUNDS_PER_PLAYER // 2 else "T"
@@ -71,7 +72,7 @@ def build_synthetic_artifact(session: Any, players: list[dict[str, Any]]) -> tup
             )
 
         replay = {
-            "username": player.get("username") or f"dev{index}",
+            "username": display,
             "domain": player.get("domain") or f"dev{index}",
             "steamid": steam_id,
             "map": session.map_name,
@@ -84,7 +85,8 @@ def build_synthetic_artifact(session: Any, players: list[dict[str, Any]]) -> tup
         body = json.dumps(
             {
                 "steamId": steam_id,
-                "username": player.get("username"),
+                "username": display,
+                "nickname": display,
                 "domain": player.get("domain"),
                 "replay": replay,
             },
@@ -95,7 +97,8 @@ def build_synthetic_artifact(session: Any, players: list[dict[str, Any]]) -> tup
         meta_players.append(
             {
                 "steamId": steam_id,
-                "username": player.get("username"),
+                "username": display,
+                "nickname": display,
                 "domain": player.get("domain"),
                 "rounds": len(rounds),
                 "bytes": len(body),

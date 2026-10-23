@@ -12,6 +12,10 @@ body{
 }
 header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--bg) 70%,transparent);
   padding:16px 0 10px;display:flex;align-items:center;gap:10px}
+/* One neutral column: phones fill it, tablets/desktop centre it instead of
+   stretching cards across 1200px. */
+header,#view-room,#view-player{max-width:600px;margin-left:auto;margin-right:auto;width:100%}
+body.player-mode header{display:none}
 .code{font-size:22px;font-weight:600;letter-spacing:3px;font-variant-numeric:tabular-nums}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--dim);margin-left:auto}
 .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(63,185,80,.15)}
@@ -60,9 +64,14 @@ header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--b
 .path-row:active{border-color:var(--ct)}
 .path-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .path-row .go{color:var(--ct);font-size:12px}
+.path-row .side{font-size:10px;border-radius:4px;padding:1px 4px;margin-left:6px}
+.path-row .side.ct{background:rgba(91,156,248,.16);color:var(--ct)}
+.path-row .side.t{background:rgba(224,164,74,.16);color:var(--t)}
 
-.player-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 12px}
-.player-head b{font-size:17px;font-weight:600}
+.player-head{display:flex;align-items:center;gap:10px;margin:12px 0 12px}
+.player-head .player-meta{flex:1;min-width:0}
+.player-head b{display:block;font-size:17px;font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
 .canvas-wrap{background:#141821;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 #replay{display:block;width:100%;aspect-ratio:1/1;touch-action:manipulation}
 .controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}

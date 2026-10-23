@@ -7,8 +7,14 @@ import { ReplayPlayer } from '@shared/replay-core.js';
 interface PathPlayer {
   steamId: string;
   username?: string;
+  nickname?: string;
   rounds: number;
   bytes?: number;
+}
+
+/** The engine may omit `username`; fall back to the roster nickname. */
+function displayName(player: PathPlayer) {
+  return player.nickname || player.username || player.steamId;
 }
 
 const players = ref<PathPlayer[]>([]);
@@ -29,9 +35,10 @@ let observer: ResizeObserver | null = null;
 const settings = teamSyncClient.getSettings();
 const baseUrl = settings.serverUrl.replace(/\/+$/, '');
 
-const activeName = computed(
-  () => players.value.find((item) => item.steamId === activeSteam.value)?.username || '',
-);
+const activeName = computed(() => {
+  const player = players.value.find((item) => item.steamId === activeSteam.value);
+  return player ? displayName(player) : '';
+});
 const canRender = computed(() => status.value === 'ready' && Boolean(settings.token));
 
 function authHeaders() {
@@ -163,7 +170,7 @@ onBeforeUnmount(() => {
         "
         @click="openPlayer(player)"
       >
-        <span class="min-w-0 flex-1 truncate">{{ player.username || player.steamId }}</span>
+        <span class="min-w-0 flex-1 truncate">{{ displayName(player) }}</span>
         <span class="shrink-0 text-[10px] text-slate-400">{{ player.rounds }} 回合</span>
       </button>
     </aside>
