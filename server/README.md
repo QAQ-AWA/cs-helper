@@ -84,7 +84,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 45 passed（含 node 无头渲染测试）
+cd server && python -m pytest tests -q     # 50 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -133,6 +133,21 @@ python import_radar.py --from-vpk "F:/SteamLibrary/steamapps/common/Counter-Stri
 `awpy get maps` 的 CDN（awpycs.com）目前被 Cloudflare 返回 403，`import_radar.py` 就是给这种情况用的：变换取官方值，图片由你提供。详见 `engine/README.md`。
 
 没有 `data/maps/<map>/{radar.png,meta.json}` 时，解析任务会在开始时返回 `ROOM_ERROR 2002`，不会跑一半才失败；手机端回放会画网格占位而不是白屏。
+
+## 服务端 AI（可选）
+
+画像就绪后自动触发，**一局只调一次模型**，结果以流式事件广播给房间内所有设备。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `CS_HELPER_AI_KEY` | 空 | 不填则跳过 AI 任务（`aiState=skipped`），其它功能不受影响 |
+| `CS_HELPER_AI_BASE_URL` | `https://api.deepseek.com/v1` | 任何 OpenAI 兼容端点（OpenAI / Gemini 兼容层 / Ollama） |
+| `CS_HELPER_AI_MODEL` | `deepseek-chat` | 模型名 |
+| `CS_HELPER_AI_TIMEOUT` | `60` | 单次请求超时（秒） |
+| `CS_HELPER_AI_MAX_TOKENS` | `700` | 输出上限 |
+
+事件：`AI_STREAM_CHUNK{accumulated}` 流式推送 → `AI_REPORT_READY{report}` 收尾；
+结果同时写入会话的 `aiText`，手机中途进房或断线重连都能直接看到全文。
 
 ## 为什么解析跑子进程
 

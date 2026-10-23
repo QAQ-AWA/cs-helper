@@ -18,9 +18,10 @@ import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, Iterator, Protocol
 
 from . import adapters, settings
+from .ai import build_prompt
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
 from .events import Action
@@ -29,6 +30,11 @@ from .store import Session
 log = logging.getLogger("cs-helper.jobs")
 
 EmitSession = Callable[[Session, str, dict[str, Any]], None]
+STREAM_EMIT_INTERVAL = 0.12
+
+
+class AiClient(Protocol):
+    def stream(self, prompt: str) -> Iterator[str]: ...
 
 _STEP_LABELS = {
     0: "识别玩家",
@@ -47,11 +53,13 @@ class JobManager:
         emit_session: EmitSession,
         artifacts: ArtifactStore,
         demo_runner: DemoRunner | None = None,
+        ai_client: AiClient | None = None,
         max_workers: int = 4,
     ) -> None:
         self._emit_session = emit_session
         self._artifacts = artifacts
         self._demo_runner = demo_runner
+        self._ai_client = ai_client
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job")
         self._futures: set[Future] = set()
         self._lock = Lock()
@@ -149,6 +157,62 @@ class JobManager:
         session.profiles = payload["players"]
         session.profile_state = "ready"
         self._emit_session(session, Action.PROFILE_READY, payload)
+        # AI 依赖画像，所以串在画像之后，而不是等客户端再触发一次。
+        self.submit_ai(session)
+
+    # -- ai ------------------------------------------------------------
+    def submit_ai(self, session: Session) -> Future | None:
+        if self._ai_client is None:
+            if session.ai_state == "pending":
+                session.ai_state = "skipped"
+            return None
+        with self._lock:
+            if session.ai_state in {"running", "ready"}:
+                return None
+            session.ai_state = "running"
+        return self.submit("ai", session, self._ai_work)
+
+    def _ai_work(self, session: Session) -> None:
+        assert self._ai_client is not None
+        players = session.profiles or adapters.normalise_players(session.report)
+        prompt = build_prompt(session.map_name, players)
+
+        accumulated = ""
+        last_emit = 0.0
+        for chunk in self._ai_client.stream(prompt):
+            if not chunk:
+                continue
+            accumulated += chunk
+            now = time.monotonic()
+            if now - last_emit >= STREAM_EMIT_INTERVAL:
+                last_emit = now
+                self._emit_session(
+                    session,
+                    Action.AI_STREAM_CHUNK,
+                    {"sessionId": session.id, "accumulated": accumulated},
+                )
+
+        if not accumulated.strip():
+            session.ai_state = "failed"
+            self._emit_session(
+                session,
+                Action.ROOM_ERROR,
+                {"code": 2005, "message": "AI 未返回内容", "retryable": True, "stage": "ai"},
+            )
+            return
+
+        session.ai_text = accumulated
+        session.ai_state = "ready"
+        self._emit_session(
+            session,
+            Action.AI_STREAM_CHUNK,
+            {"sessionId": session.id, "accumulated": accumulated},
+        )
+        self._emit_session(
+            session,
+            Action.AI_REPORT_READY,
+            {"sessionId": session.id, "report": accumulated, "model": settings.AI_MODEL},
+        )
 
     # -- demo ----------------------------------------------------------
     def _demo_work(self, session: Session) -> None:

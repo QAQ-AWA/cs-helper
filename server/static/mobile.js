@@ -99,6 +99,10 @@ function handle(action, payload) {
       renderMembers(payload.members || []);
       if (payload.match) {
         renderMatch(payload.match);
+        if (payload.match.aiText) {
+          $('ai-card').classList.remove('hidden');
+          $('ai').textContent = payload.match.aiText;
+        }
         if (payload.match.artifactId && !state.paths) loadPaths(payload.match.artifactId);
       }
       break;
@@ -107,6 +111,10 @@ function handle(action, payload) {
       break;
     case 'MATCH_DETECTED':
       renderMatch(payload);
+      if (payload.aiText) {
+        $('ai-card').classList.remove('hidden');
+        $('ai').textContent = payload.aiText;
+      }
       break;
     case 'PROFILE_READY':
       renderMatch(

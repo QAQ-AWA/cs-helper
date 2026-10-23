@@ -84,6 +84,8 @@ class Session:
     profiles: list[dict[str, Any]] | None = None
     demo_state: str = "pending"  # pending | running | ready | skipped | failed
     artifact_id: str | None = None
+    ai_state: str = "pending"  # pending | running | ready | skipped | failed
+    ai_text: str | None = None
 
     @property
     def key(self) -> str:
@@ -101,6 +103,8 @@ class Session:
             "profileState": self.profile_state,
             "demoState": self.demo_state,
             "artifactId": self.artifact_id,
+            "aiState": self.ai_state,
+            "aiText": self.ai_text,
         }
 
 

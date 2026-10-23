@@ -28,12 +28,13 @@ class RoomHub:
         demo_runner: DemoRunner | None = None,
         room_mode: str | None = None,
         single_room_code: str | None = None,
+        ai_client: object | None = None,
     ) -> None:
         self.store = store
         self.tokens = tokens
         self.ws = ws
         self.artifacts = artifacts or ArtifactStore()
-        self.jobs = JobManager(self.emit_session, self.artifacts, demo_runner)
+        self.jobs = JobManager(self.emit_session, self.artifacts, demo_runner, ai_client)  # type: ignore[arg-type]
         self.room_mode = room_mode or settings.ROOM_MODE
         self.single_room_code = single_room_code or settings.SINGLE_ROOM_CODE
 

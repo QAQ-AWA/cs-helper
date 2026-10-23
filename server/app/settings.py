@@ -33,6 +33,13 @@ if ROOM_MODE not in {"single", "multi"}:
     ROOM_MODE = "single"
 SINGLE_ROOM_CODE = (os.getenv("CS_HELPER_SINGLE_ROOM_CODE") or "MAIN").strip().upper()[:12] or "MAIN"
 
+# 服务端 AI：任何 OpenAI 兼容端点。没有 key 就跳过 AI 任务，其它功能照常。
+AI_BASE_URL = os.getenv("CS_HELPER_AI_BASE_URL", "https://api.deepseek.com/v1")
+AI_MODEL = os.getenv("CS_HELPER_AI_MODEL", "deepseek-chat")
+AI_KEY = (os.getenv("CS_HELPER_AI_KEY") or "").strip()
+AI_TIMEOUT = _int_env("CS_HELPER_AI_TIMEOUT", 60, 5, 300)
+AI_MAX_TOKENS = _int_env("CS_HELPER_AI_MAX_TOKENS", 700, 100, 4000)
+
 
 def job_dir(session_id: str) -> Path:
     """Per-job output directory. Isolation is why the engine runs in a child."""

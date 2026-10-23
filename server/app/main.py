@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import events, settings
+from .ai import OpenAiClient, config_from_settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
@@ -58,6 +59,7 @@ def create_app(
     demo_runner: DemoRunner | None | str = "auto",
     artifacts: ArtifactStore | None = None,
     room_mode: str | None = None,
+    ai_client: object | None | str = "auto",
 ) -> FastAPI:
     store = store or Store(**({"room_ttl": room_ttl} if room_ttl else {}))
     tokens = TokenService(secret)
@@ -69,7 +71,18 @@ def create_app(
             if os.getenv("CS_HELPER_DEMO", "1").strip() not in {"0", "false", "no"}
             else None
         )
-    hub = RoomHub(store, tokens, ws_manager, artifact_store, demo_runner, room_mode)  # type: ignore[arg-type]
+    if ai_client == "auto":
+        ai_config = config_from_settings()
+        ai_client = OpenAiClient(ai_config) if ai_config else None
+    hub = RoomHub(  # type: ignore[arg-type]
+        store,
+        tokens,
+        ws_manager,
+        artifacts=artifact_store,
+        demo_runner=demo_runner,
+        room_mode=room_mode,
+        ai_client=ai_client,
+    )
     limiter = JoinLimiter()
 
     @asynccontextmanager
@@ -140,6 +153,7 @@ def create_app(
                 "roomCode": hub.single_room_code if hub.is_single_room else None,
                 "protocolVersion": events.PROTOCOL_VERSION,
                 "demoEnabled": demo_runner is not None,
+                "aiEnabled": ai_client is not None,
             }
         )
 
