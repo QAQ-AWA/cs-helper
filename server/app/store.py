@@ -162,6 +162,43 @@ class Store:
             room.members[member.id] = member
             return member
 
+    def ensure_room(
+        self, code: str, nickname: str, device_type: str
+    ) -> tuple[Room, Member, bool]:
+        """Single-room mode: one stable room, and one stable identity per device.
+
+        Re-clicking "create room" or reopening the phone page must not pile up
+        ghost members, so an existing (nickname, deviceType) pair is reused.
+        """
+
+        with self._lock:
+            self._purge_locked()
+            normalised = self._normalise(code) or "MAIN"
+            room = self._rooms.get(normalised)
+            if room is None:
+                now = time.time()
+                room = Room(
+                    code=normalised,
+                    room_id=uuid.uuid4().hex,
+                    created_at=now,
+                    expires_at=now + self.room_ttl,
+                )
+                self._rooms[normalised] = room
+            room.expires_at = time.time() + self.room_ttl
+
+            for member in room.members.values():
+                if member.nickname == nickname and member.device_type == device_type:
+                    return room, member, False
+
+            member = Member(
+                id=uuid.uuid4().hex[:12],
+                nickname=nickname,
+                device_type=device_type,
+                joined_at=time.time(),
+            )
+            room.members[member.id] = member
+            return room, member, True
+
     def set_online(self, room: Room, member_id: str, online: bool) -> bool:
         with self._lock:
             member = room.members.get(member_id)

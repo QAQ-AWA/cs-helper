@@ -15,7 +15,7 @@ from app.main import create_app  # noqa: E402
 def app():
     # demo_runner=None keeps the suite off the subprocess/egress path; the demo
     # job has its own tests with a fake runner.
-    return create_app(secret="test-secret", room_ttl=600, demo_runner=None)
+    return create_app(secret="test-secret", room_ttl=600, demo_runner=None, room_mode="multi")
 
 
 @pytest.fixture()

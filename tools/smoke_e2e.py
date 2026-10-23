@@ -41,15 +41,20 @@ async def main() -> int:
         assert page.status_code == 200 and "CS Helper" in page.text
         print("mobile page bytes:", len(page.text))
 
+        config = (await http.get(f"{BASE}/api/v1/config")).json()["data"]
+        print("config:", config)
+        assert config["mode"] == "single"
+
         created = (await http.post(f"{BASE}/api/v1/room/create", json={"creatorNickname": "房主"})).json()
         assert created["code"] == 0, created
         room = created["data"]
         print("room:", room["roomCode"], "joinUrl:", room["joinUrl"])
+        assert room["roomCode"] == config["roomCode"]
 
         joined = (
             await http.post(
                 f"{BASE}/api/v1/room/join",
-                json={"roomCode": room["roomCode"], "nickname": "手机队友", "deviceType": "mobile"},
+                json={"nickname": "手机队友", "deviceType": "mobile"},  # no code in single mode
             )
         ).json()
         assert joined["code"] == 0, joined

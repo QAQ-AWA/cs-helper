@@ -27,6 +27,12 @@ def _int_env(name: str, default: int, low: int, high: int) -> int:
 DEMO_MAX_DEMOS = _int_env("CS_HELPER_DEMO_MAX_DEMOS", 6, 1, 10)
 ARTIFACT_MAX_ITEMS = _int_env("CS_HELPER_ARTIFACT_MAX_ITEMS", 64, 4, 1024)
 
+# 单人/小队自用场景只需要一个房间；多房间码保留为开关，等真正需要时打开。
+ROOM_MODE = (os.getenv("CS_HELPER_ROOM_MODE", "single") or "single").strip().lower()
+if ROOM_MODE not in {"single", "multi"}:
+    ROOM_MODE = "single"
+SINGLE_ROOM_CODE = (os.getenv("CS_HELPER_SINGLE_ROOM_CODE") or "MAIN").strip().upper()[:12] or "MAIN"
+
 
 def job_dir(session_id: str) -> Path:
     """Per-job output directory. Isolation is why the engine runs in a child."""

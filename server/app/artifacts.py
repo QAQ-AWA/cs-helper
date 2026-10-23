@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -19,10 +19,19 @@ class Artifact:
     body: bytes
     media_type: str
     etag: str
+    # Per-player payloads kept beside the index so a phone downloads one player
+    # instead of the whole roster.
+    parts: dict[str, bytes] = field(default_factory=dict)
 
     @property
     def size(self) -> int:
-        return len(self.body)
+        return len(self.body) + sum(len(part) for part in self.parts.values())
+
+
+@dataclass(frozen=True)
+class ArtifactPart:
+    body: bytes
+    etag: str
 
 
 class ArtifactStore:
@@ -32,9 +41,16 @@ class ArtifactStore:
         self._items: OrderedDict[str, Artifact] = OrderedDict()
         self._total = 0
 
-    def put(self, body: bytes, media_type: str = "application/json") -> Artifact:
+    def put(
+        self,
+        body: bytes,
+        media_type: str = "application/json",
+        parts: dict[str, bytes] | None = None,
+    ) -> Artifact:
         if not body:
             raise ValueError("artifact body must not be empty")
+        parts = parts or {}
+        total = len(body) + sum(len(part) for part in parts.values())
         digest = hashlib.sha256(body).hexdigest()
         artifact_id = digest[:32]
         existing = self._items.get(artifact_id)
@@ -42,11 +58,11 @@ class ArtifactStore:
             self._items.move_to_end(artifact_id)
             return existing
 
-        if len(body) > self.max_bytes:
+        if total > self.max_bytes:
             raise ValueError("artifact exceeds the store budget")
 
         while self._items and (
-            len(self._items) >= self.max_items or self._total + len(body) > self.max_bytes
+            len(self._items) >= self.max_items or self._total + total > self.max_bytes
         ):
             _, evicted = self._items.popitem(last=False)
             self._total -= evicted.size
@@ -56,6 +72,7 @@ class ArtifactStore:
             body=body,
             media_type=media_type,
             etag=f'"{digest[:32]}"',
+            parts=parts,
         )
         self._items[artifact_id] = artifact
         self._total += artifact.size
@@ -66,6 +83,15 @@ class ArtifactStore:
         if artifact is not None:
             self._items.move_to_end(artifact_id)
         return artifact
+
+    def get_part(self, artifact_id: str, key: str) -> ArtifactPart | None:
+        artifact = self.get(artifact_id)
+        if artifact is None:
+            return None
+        body = artifact.parts.get(key)
+        if body is None:
+            return None
+        return ArtifactPart(body=body, etag=f'"{hashlib.sha256(body).hexdigest()[:32]}"')
 
     @property
     def total_bytes(self) -> int:

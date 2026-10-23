@@ -56,6 +56,7 @@ def create_app(
     room_ttl: int | None = None,
     demo_runner: DemoRunner | None | str = "auto",
     artifacts: ArtifactStore | None = None,
+    room_mode: str | None = None,
 ) -> FastAPI:
     store = store or Store(**({"room_ttl": room_ttl} if room_ttl else {}))
     tokens = TokenService(secret)
@@ -67,7 +68,7 @@ def create_app(
             if os.getenv("CS_HELPER_DEMO", "1").strip() not in {"0", "false", "no"}
             else None
         )
-    hub = RoomHub(store, tokens, ws_manager, artifact_store, demo_runner)  # type: ignore[arg-type]
+    hub = RoomHub(store, tokens, ws_manager, artifact_store, demo_runner, room_mode)  # type: ignore[arg-type]
     limiter = JoinLimiter()
 
     @asynccontextmanager
@@ -128,6 +129,19 @@ def create_app(
         return room, member
 
     # -- room endpoints -------------------------------------------------
+    @app.get("/api/v1/config")
+    def public_config():
+        """Lets the phone page know whether it needs to ask for a room code."""
+
+        return ok(
+            {
+                "mode": hub.room_mode,
+                "roomCode": hub.single_room_code if hub.is_single_room else None,
+                "protocolVersion": events.PROTOCOL_VERSION,
+                "demoEnabled": demo_runner is not None,
+            }
+        )
+
     @app.post("/api/v1/room/create")
     def room_create(payload: RoomCreate):
         room, _member, token, expires_at = hub.create_room(payload.creatorNickname, payload.deviceType)
@@ -146,6 +160,8 @@ def create_app(
         client = request.client.host if request.client else "unknown"
         if not limiter.allow(client):
             raise ApiError("尝试过于频繁，请稍后再试", code=1004, status=429)
+        if not hub.is_single_room and len(payload.roomCode.strip()) < 4:
+            raise ApiError("房间码无效", code=1002, status=400)
         try:
             room, _member, token, expires_at = hub.join_room(
                 payload.roomCode, payload.nickname, payload.deviceType
@@ -172,6 +188,19 @@ def create_app(
         return ok(hub.room_state(room))
 
     # -- artifacts ------------------------------------------------------
+    def _artifact_response(request: Request, if_none_match: str | None, body: bytes, etag: str, media_type: str):
+        if if_none_match and if_none_match.strip() == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        headers = {
+            "ETag": etag,
+            "Cache-Control": "private, max-age=3600",
+            "Vary": "Accept-Encoding",
+        }
+        if "gzip" in (request.headers.get("accept-encoding") or "").lower():
+            body = gzip.compress(body, compresslevel=6)
+            headers["Content-Encoding"] = "gzip"
+        return Response(content=body, media_type=media_type, headers=headers)
+
     @app.get("/api/v1/artifacts/{artifact_id}")
     def get_artifact(
         artifact_id: str,
@@ -183,19 +212,21 @@ def create_app(
         artifact = hub.artifacts.get(artifact_id)
         if artifact is None:
             raise ApiError("对象不存在或已过期", code=1007, status=404)
-        if if_none_match and if_none_match.strip() == artifact.etag:
-            return Response(status_code=304, headers={"ETag": artifact.etag})
+        return _artifact_response(request, if_none_match, artifact.body, artifact.etag, artifact.media_type)
 
-        body = artifact.body
-        headers = {
-            "ETag": artifact.etag,
-            "Cache-Control": "private, max-age=3600",
-            "Vary": "Accept-Encoding",
-        }
-        if "gzip" in (request.headers.get("accept-encoding") or "").lower():
-            body = gzip.compress(body, compresslevel=6)
-            headers["Content-Encoding"] = "gzip"
-        return Response(content=body, media_type=artifact.media_type, headers=headers)
+    @app.get("/api/v1/artifacts/{artifact_id}/players/{steam_id}")
+    def get_artifact_player(
+        artifact_id: str,
+        steam_id: str,
+        request: Request,
+        authorization: str | None = Header(default=None),
+        if_none_match: str | None = Header(default=None),
+    ):
+        require_room(authorization)
+        part = hub.artifacts.get_part(artifact_id, steam_id)
+        if part is None:
+            raise ApiError("该玩家的轨迹不存在或已过期", code=1007, status=404)
+        return _artifact_response(request, if_none_match, part.body, part.etag, "application/json")
 
     # -- match ----------------------------------------------------------
     @app.post("/api/v1/match/report")

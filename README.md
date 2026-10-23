@@ -9,7 +9,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 | 目录 | 内容 | 技术栈 | 状态 |
 | --- | --- | --- | --- |
 | [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（284 tests） |
-| [`server/`](server/) | 房间与分发服务：房间码、上报幂等、画像广播、WS 续传、解析任务编排 | FastAPI · WebSocket | ✅ P2（33 tests） |
+| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发 | FastAPI · WebSocket | ✅ P2（38 tests） |
 | [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（97 tests） |
 | [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
 | [`tools/`](tools/) | 端到端冒烟脚本 | Python | ✅ |
@@ -50,8 +50,10 @@ export CS_HELPER_SERVER_SECRET='换成随机串'   # 不设则重启后 token �
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8787 --app-dir server
 ```
 
-- 手机/浏览器：`http://<局域网IP>:8787/?room=<6位房间码>`
+- 手机/浏览器：`http://<局域网IP>:8787/`（默认单房间，只需输昵称；带 `?room=` 亦可）
 - 健康检查：`/healthz`
+
+默认是**单房间模式**，适合自用与固定车队。需要多房间码时设 `CS_HELPER_ROOM_MODE=multi`。
 
 ### 桌面客户端
 
@@ -75,7 +77,7 @@ cd engine && python -m pytest tests -q
 
 | 套件 | 命令 | 结果 |
 | --- | --- | --- |
-| 服务端 | `cd server && pytest tests -q` | 33 passed |
+| 服务端 | `cd server && pytest tests -q` | 38 passed |
 | 引擎 | `cd engine && pytest tests -q` | 97 passed, 10 skipped（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | 284 passed |
 | 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |

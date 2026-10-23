@@ -70,7 +70,8 @@
 
 - **上传**：`POST /api/v1/match/report?roomCode=`，`Idempotency-Key: platform:matchId`，重复上报只 upsert。
 - **事件信封**：`{protocolVersion, seq, ts, action, payload}`。`action` 名称沿用客户端已有实现。
-- **传输分工**：WS 只传通知与摘要，大对象走 `GET /api/v1/artifacts/{id}`（ETag + gzip + 按玩家懒加载）。单人回放 JSON 约 140–190KB，五人叠加直接 1MB，走 WS 会拖死手机首屏。
+- **传输分工**：WS 只传通知与摘要；`TACTICAL_PATHS_READY` 只给 `artifactId`，索引约 1KB，回放按玩家拉 `GET /api/v1/artifacts/{id}/players/{steamId}`（ETag + gzip）。单人回放约 140–190KB，五人叠加近 1MB——一次性下载会拖死手机首屏。
+- **房间模式**：默认单房间（`MAIN`），`create` 幂等、`join` 免房间码、成员按 `(昵称, 设备)` 复用；`CS_HELPER_ROOM_MODE=multi` 可切回多房间码，代码路径与测试都保留。自用与固定车队不需要多房间。
 - **断线补齐**：重连带 `lastSeq`，服务端从环形缓冲补发；补不上则发 `ROOM_STATE_SYNC`（含 `profiles` 与 `latestSeq`），客户端据此重置。
 
 ## 6. 时延：必须做双档

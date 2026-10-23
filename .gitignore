@@ -22,3 +22,6 @@ engine/.demo_index.json
 
 # 本地草稿（不随仓库分发）
 /CS-合并方案与架构设计.md
+
+# 服务端任务产物
+.cache/

@@ -73,6 +73,7 @@
   <section class="card" id="match-card">
     <h2>当前对局</h2>
     <div class="map"><b id="map">等待电脑端检测…</b><span class="pill" id="countdown"></span></div>
+    <div class="muted" id="demo-status" style="margin-top:6px"></div>
   </section>
 
   <section class="card hidden" id="teams-card">
@@ -98,7 +99,7 @@
 <div class="join" id="join">
   <div class="box">
     <h1>加入对局房间</h1>
-    <p>向开黑队友要 6 位房间码，或直接扫描电脑端二维码。</p>
+    <p id="join-hint">向开黑队友要 6 位房间码，或直接扫描电脑端二维码。</p>
     <input id="nick" placeholder="你的昵称" maxlength="24" autocomplete="nickname" />
     <button id="join-btn">加入房间</button>
     <div class="err" id="join-err"></div>
@@ -108,9 +109,10 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const roomCode = (params.get('room') || '').toUpperCase();
-const storeKey = 'cs-helper-room-' + roomCode;
-const state = { token: roomCode ? localStorage.getItem(storeKey) : null, lastSeq: 0, ws: null, retry: 0 };
+let roomCode = (params.get('room') || '').toUpperCase();
+let roomMode = 'multi';
+const storeKeyFor = (code) => 'cs-helper-room-' + code;
+const state = { token: null, lastSeq: 0, ws: null, retry: 0 };
 
 function setConn(kind, text) {
   const dot = $('dot');
@@ -133,7 +135,7 @@ async function join() {
     const json = await res.json();
     if (json.code !== 0) throw new Error(json.message || '加入失败');
     state.token = json.data.token;
-    localStorage.setItem(storeKey, state.token);
+    localStorage.setItem(storeKeyFor(json.data.roomCode || roomCode), state.token);
     $('join').classList.add('hidden');
     connect();
   } catch (err) {
@@ -189,8 +191,12 @@ function handle(action, payload) {
       $('ai-card').classList.remove('hidden');
       if (typeof payload.report === 'string') $('ai').textContent = payload.report;
       break;
+    case 'TACTICAL_PATHS_READY':
+      $('demo-status').textContent = `轨迹已就绪：${(payload.players || []).length} 人`;
+      break;
     case 'ROOM_ERROR':
       setConn('warn', payload.message || '服务端异常');
+      $('demo-status').textContent = payload.message || '';
       break;
   }
 }
@@ -246,14 +252,36 @@ $('code').textContent = roomCode || '----';
 $('join-btn').addEventListener('click', join);
 $('nick').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 
-if (!roomCode) {
-  setConn('', '缺少房间码');
-  showToast('请扫描电脑端二维码，或使用带 ?room=XXXXXX 的链接');
-  $('join-btn').disabled = true;
-} else if (state.token) {
-  $('join').classList.add('hidden');
-  connect();
+async function boot() {
+  try {
+    const res = await fetch('/api/v1/config');
+    const json = await res.json();
+    if (json.code === 0 && json.data) {
+      roomMode = json.data.mode || 'multi';
+      if (!roomCode && json.data.roomCode) roomCode = json.data.roomCode;
+      if (roomMode === 'single') {
+        $('join-hint').textContent = '当前为单房间模式，输入昵称即可进入。';
+      }
+    }
+  } catch (_) { /* 服务端不可达时仍走手动房间码 */ }
+
+  $('code').textContent = roomCode || '----';
+  if (!roomCode) {
+    setConn('', '缺少房间码');
+    showToast('请扫描电脑端二维码，或使用带 ?room=XXXXXX 的链接');
+    $('join-btn').disabled = true;
+    return;
+  }
+
+  const saved = localStorage.getItem(storeKeyFor(roomCode));
+  if (saved) {
+    state.token = saved;
+    $('join').classList.add('hidden');
+    connect();
+  }
 }
+
+boot();
 </script>
 </body>
 </html>

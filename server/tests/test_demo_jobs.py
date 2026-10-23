@@ -49,7 +49,7 @@ def demo_client(monkeypatch, tmp_path):
     monkeypatch.setattr(app_settings, "maps_ready", lambda name: True)
     monkeypatch.setattr(app_settings, "job_dir", lambda session_id: tmp_path / session_id)
     runner = FakeRunner()
-    app = create_app(secret="test-secret", room_ttl=600, demo_runner=runner)
+    app = create_app(secret="test-secret", room_ttl=600, demo_runner=runner, room_mode="multi")
     with TestClient(app) as client:
         yield client, runner
 
@@ -98,8 +98,23 @@ def test_demo_job_publishes_artifact_ref(demo_client):
     assert artifact.status_code == 200
     bundle = artifact.json()
     assert bundle["map"] == "de_mirage"
-    assert bundle["players"][0]["replay"]["round_count"] == 2
+    # The index stays small: replay payloads live in per-player parts.
+    assert bundle["players"][0]["steamId"] == "76561198000000002"
+    assert "replay" not in bundle["players"][0]
     assert bundle["failed"][0]["username"] == "Bravo"
+
+    player = client.get(
+        f"/api/v1/artifacts/{data['match']['artifactId']}/players/76561198000000002",
+        headers={"Authorization": f"Bearer {room['token']}"},
+    )
+    assert player.status_code == 200
+    assert player.json()["replay"]["round_count"] == 2
+
+    missing = client.get(
+        f"/api/v1/artifacts/{data['match']['artifactId']}/players/76561198000000009",
+        headers={"Authorization": f"Bearer {room['token']}"},
+    )
+    assert missing.status_code == 404
 
 
 def test_demo_runs_once_per_match_across_rooms(demo_client):

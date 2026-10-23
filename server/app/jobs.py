@@ -245,16 +245,35 @@ class JobManager:
             }
             for item in outcome.players
         ]
+        # Heavy replay payloads go into per-player parts: the phone picks one
+        # player at a time instead of downloading the whole roster.
+        parts: dict[str, bytes] = {}
+        for item in outcome.players:
+            steam_id = item.get("steamId")
+            if not steam_id:
+                continue
+            parts[str(steam_id)] = json.dumps(
+                {
+                    "steamId": steam_id,
+                    "username": item.get("username"),
+                    "domain": item.get("domain"),
+                    "replay": item.get("replay"),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+
         bundle = {
             "sessionId": session.id,
             "map": session.map_name,
             "generatedAt": int(time.time() * 1000),
-            "players": outcome.players,
+            "players": players,
             "failed": outcome.failed,
         }
         try:
             artifact = self._artifacts.put(
-                json.dumps(bundle, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                json.dumps(bundle, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                parts=parts,
             )
         except ValueError as exc:
             session.demo_state = "failed"

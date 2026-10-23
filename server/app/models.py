@@ -104,7 +104,8 @@ class RoomCreate(BaseModel):
 
 
 class RoomJoin(BaseModel):
-    roomCode: str = Field(min_length=4, max_length=12)
+    # Empty is valid in single-room mode, where the code is implied.
+    roomCode: str = Field(default="", max_length=12)
     nickname: str = Field(default="队友", max_length=32)
     deviceType: _DEVICE = "mobile"
 

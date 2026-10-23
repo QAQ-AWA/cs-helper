@@ -45,13 +45,25 @@ server/
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
+| GET | `/api/v1/config` | — | 房间模式与默认房间码，手机端据此决定要不要让用户填码 |
 | POST | `/api/v1/room/create` | — | 建房，返回 `roomCode` + `token` |
 | POST | `/api/v1/room/join` | — | 加房（按 IP 限流，防房号爆破） |
 | GET | `/api/v1/room/network/info` | — | 局域网 IP，供电脑端生成手机链接 |
 | GET | `/api/v1/room/{code}/snapshot` | Bearer | 全量状态（成员/对局/画像/latestSeq） |
 | POST | `/api/v1/match/report?roomCode=` | Bearer | 上报对局，`platform:matchId` 幂等 |
-| GET | `/api/v1/artifacts/{id}` | Bearer | 回放大对象；内容寻址、ETag、gzip |
+| GET | `/api/v1/artifacts/{id}` | Bearer | 回放索引（小）；内容寻址、ETag、gzip |
+| GET | `/api/v1/artifacts/{id}/players/{steamId}` | Bearer | **单个玩家的回放**，手机按需拉取 |
 | WS | `/ws?token=&lastSeq=` | token | 增量事件；断线按 `lastSeq` 补发 |
+
+## 单房间模式（默认）
+
+自用/小队场景不需要多房间，默认只有一个房间 `MAIN`：
+
+- `create` 幂等：重复调用返回同一个房间，按 `(昵称, 设备类型)` 复用成员，重启客户端不会堆积幽灵成员。
+- `join` 可以不带房间码。
+- 手机端从 `/api/v1/config` 拿到 `roomCode`，用户只需输昵称。
+
+要恢复多房间码系统：`CS_HELPER_ROOM_MODE=multi`（代码路径完整保留，有测试覆盖）。单房间码可用 `CS_HELPER_SINGLE_ROOM_CODE` 改名。
 
 错误统一为 `{"code": 1000+, "message": "..."}`，与客户端 `if (json.code !== 0)` 的判断一致。
 
@@ -72,7 +84,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 33 passed
+cd server && python -m pytest tests -q     # 38 passed
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -91,7 +103,7 @@ Demo 任务用真实 `engine/job_runner.py` 验证过子进程链路（进度行
 | `CS_HELPER_DEMO_DIR` | `engine/demos_opponents` | Demo 缓存（跨任务共享，用于去重） |
 | `CS_HELPER_MAPS_DIR` | `engine/data/maps` | 需先运行 `engine/setup_maps.py` |
 
-流程：`JOB_PROGRESS(stage=demo)` 逐个玩家推进 → 完成后发出 `TACTICAL_PATHS_READY{artifactId}` → 客户端凭 token 拉 `/api/v1/artifacts/{id}`。
+流程：`JOB_PROGRESS(stage=demo)` 逐个玩家推进 → 完成后发出 `TACTICAL_PATHS_READY{artifactId}` → 客户端先拉索引，再按需拉 `.../players/{steamId}`（单人回放约 150KB，整队约 750KB）。
 地图资源缺失时返回 `ROOM_ERROR{code:2002}`，平台不是 5E 时任务标记 `skipped`。
 
 ## 为什么解析跑子进程
