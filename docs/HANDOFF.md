@@ -266,6 +266,14 @@ MatchWorkspace
   且排序靠前，导致手机链接指向 `198.18.0.1` 这种手机永远连不上的地址。现在过滤 198.18/19、link-local、CGNAT，
   并按 192.168 > 10 > 172.16-31 排序。
 
+**第四轮：历史页与关于页视觉统一**
+
+- 历史列表 4 个组件 + 视图里的 `slate-*` / `rose-*` / `emerald-*` / `bg-white` 全量替换成
+  `fg` / `surface` / `border` / `danger` / `success`。
+- 关于页：仓库链接原本指向 `cs-helper-exe`（旧独立桌面项目），改为 `cs-helper`；
+  版本号加构建期兜底（`vite define __APP_VERSION__`），Tauri 取不到时不再空白。
+- 预览页新增 `?view=about` 与 `?view=history`，两页都能截图自检。
+
 
 ### 0.3 数据从哪来（签名网关）
 
