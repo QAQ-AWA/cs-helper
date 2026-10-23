@@ -28,7 +28,7 @@ from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
-from .models import MatchReport, RoomCreate, RoomJoin
+from .models import MatchReport, PostMatchReport, RoomCreate, RoomJoin
 from .security import JoinLimiter, TokenService, lan_addresses
 from .store import Store
 from .ws import Connection, ConnectionManager
@@ -265,6 +265,19 @@ def create_app(
                 "profileState": session.profile_state,
             }
         )
+
+    @app.post("/api/v1/match/post-report")
+    def post_match_report(
+        payload: PostMatchReport,
+        roomCode: str = Query(..., min_length=4, max_length=12),
+        authorization: str | None = Header(default=None),
+    ):
+        room, _member = require_room(authorization, roomCode)
+        try:
+            hub.report_post_match(room, payload.model_dump())
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局，无法归档战报", code=1009, status=409) from None
+        return ok({"stored": True, "matchCode": payload.matchCode})
 
     # -- websocket ------------------------------------------------------
     @app.websocket("/ws")

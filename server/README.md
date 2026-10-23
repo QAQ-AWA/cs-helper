@@ -51,6 +51,7 @@ server/
 | GET | `/api/v1/room/network/info` | — | 局域网 IP，供电脑端生成手机链接 |
 | GET | `/api/v1/room/{code}/snapshot` | Bearer | 全量状态（成员/对局/画像/latestSeq） |
 | POST | `/api/v1/match/report?roomCode=` | Bearer | 上报对局，`platform:matchId` 幂等 |
+| POST | `/api/v1/match/post-report?roomCode=` | Bearer | 上报赛后战报，覆盖式写入并广播 |
 | GET | `/api/v1/artifacts/{id}` | Bearer | 回放索引（小）；内容寻址、ETag、gzip |
 | GET | `/api/v1/artifacts/{id}/players/{steamId}` | Bearer | **单个玩家的回放**，手机按需拉取 |
 | WS | `/ws?token=&lastSeq=` | token | 增量事件；断线按 `lastSeq` 补发 |
@@ -84,7 +85,7 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 50 passed（含 node 无头渲染测试）
+cd server && python -m pytest tests -q     # 55 passed（含 node 无头渲染测试）
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
@@ -148,6 +149,21 @@ python import_radar.py --from-vpk "F:/SteamLibrary/steamapps/common/Counter-Stri
 
 事件：`AI_STREAM_CHUNK{accumulated}` 流式推送 → `AI_REPORT_READY{report}` 收尾；
 结果同时写入会话的 `aiText`，手机中途进房或断线重连都能直接看到全文。
+
+## 赛后战报
+
+比分、半场、十人数据与 AI 命中复盘由**桌面端**从平台接口取回后上报（服务端不重复抓取，避免再维护一套解析）：
+
+```
+POST /api/v1/match/post-report?roomCode=MAIN   Bearer
+{ matchCode, scoreA, scoreB, winnerSide, halfScores, players[], comparison }
+        ↓ 覆盖式写入 session.postReport
+POST_MATCH_READY { sessionId, ...report }  → 房间内所有设备
+```
+
+- 必须先有对局上报，否则返回 `409 / 1009`。
+- 重复上报是覆盖，不会产生两份战报。
+- 战报同时写入快照，手机重连后仍能看到。
 
 ## 为什么解析跑子进程
 

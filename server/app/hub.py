@@ -132,5 +132,19 @@ class RoomHub:
         self.jobs.submit_demo(session)
         return session, created
 
+    def report_post_match(self, room: Room, report: dict[str, Any]) -> Session:
+        """赛后面板的数据由客户端取回，服务端只负责归档与广播。"""
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+        session.post_report = report
+        self.emit_session(
+            session,
+            Action.POST_MATCH_READY,
+            {"sessionId": session.id, **report},
+        )
+        return session
+
     def shutdown(self) -> None:
         self.jobs.shutdown()

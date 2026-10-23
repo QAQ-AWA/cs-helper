@@ -12,6 +12,7 @@ import type { useAiAnalysis } from '../composables/useAiAnalysis';
 import type { useComments } from '../composables/useComments';
 import { useMatchCountdown } from '../composables/useMatchCountdown';
 import { useMatchHeaderMetaCompaction } from '../composables/useMatchHeaderMetaCompaction';
+import { teamSyncClient } from '@core/sync/sync-client';
 import { useMatchRevealAnimation } from '../composables/useMatchRevealAnimation';
 import { useTeamTableColumns } from '../composables/useTeamTableColumns';
 import AiAnalysisPanel from './AiAnalysisPanel.vue';
@@ -146,6 +147,8 @@ watch(
 function onPostMatchUpdated(report: P5ePostMatchReport) {
   cachedPostMatch.value = report;
   emit('postMatchUpdated', report);
+  // 队友手机要看到同一份战报；失败不阻塞本地展示。
+  void teamSyncClient.reportPostMatch(report).catch(() => {});
 }
 const highlightedSide = ref<'A' | 'B' | null>(null);
 const focusedAiSteamId = ref<string | null>(null);

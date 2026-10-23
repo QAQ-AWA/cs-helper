@@ -13,6 +13,7 @@ export class TeamSyncClient {
   private listeners = new Set<SyncEventListener>();
   private reconnectTimer: number | null = null;
   private lastReportedMatchId: string | null = null;
+  private readonly reportedPostMatches = new Set<string>();
   /** Last event sequence applied, used to resume after a dropped socket. */
   private lastSeq = 0;
 
@@ -232,6 +233,42 @@ export class TeamSyncClient {
         retryable: true,
         stage: 'report',
       });
+    }
+  }
+
+  /** 赛后战报由客户端取回后上报，服务端只做归档与广播。 */
+  public async reportPostMatch(report: unknown): Promise<void> {
+    if (!this.settings.enabled || !this.settings.roomCode || !this.settings.token) return;
+    const key = (report as { matchCode?: string })?.matchCode || 'unknown';
+    if (this.reportedPostMatches.has(key)) return;
+
+    const serverUrl = this.settings.serverUrl.replace(/\/+$/, '');
+    try {
+      const res = await fetch(
+        `${serverUrl}/api/v1/match/post-report?roomCode=${encodeURIComponent(this.settings.roomCode)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.settings.token}`,
+          },
+          body: JSON.stringify(report),
+        },
+      );
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.code === 0) {
+        this.reportedPostMatches.add(key);
+        this.emit('postMatchReported', json.data);
+        return;
+      }
+      this.emit('ROOM_ERROR', {
+        code: json?.code ?? res.status,
+        message: json?.message || '赛战报上报失败',
+        retryable: res.status >= 500,
+        stage: 'post-match',
+      });
+    } catch (err) {
+      console.warn('Failed to upload post-match report:', err);
     }
   }
 

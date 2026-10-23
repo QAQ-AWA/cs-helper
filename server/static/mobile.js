@@ -103,6 +103,7 @@ function handle(action, payload) {
           $('ai-card').classList.remove('hidden');
           $('ai').textContent = payload.match.aiText;
         }
+        if (payload.match.postReport) renderPostMatch(payload.match.postReport);
         if (payload.match.artifactId && !state.paths) loadPaths(payload.match.artifactId);
       }
       break;
@@ -115,6 +116,10 @@ function handle(action, payload) {
         $('ai-card').classList.remove('hidden');
         $('ai').textContent = payload.aiText;
       }
+      if (payload.postReport) renderPostMatch(payload.postReport);
+      break;
+    case 'POST_MATCH_READY':
+      renderPostMatch(payload);
       break;
     case 'PROFILE_READY':
       renderMatch(
@@ -230,6 +235,43 @@ function renderPaths(payload) {
       openPlayer(button.dataset.steam, button.dataset.name),
     );
   });
+}
+
+function renderPostMatch(report) {
+  if (!report) return;
+  $('post-card').classList.remove('hidden');
+  $('post-score').textContent = `${report.scoreA ?? 0} : ${report.scoreB ?? 0}`;
+  const winner = report.winnerSide;
+  $('post-winner').textContent = winner === 'Draw' ? '平局' : winner ? `${winner} 队胜` : '';
+
+  const half = report.halfScores;
+  $('post-half').textContent = half
+    ? `半场 ${half.fhA}:${half.fhB} · ${half.shA}:${half.shB}`
+    : `${report.roundTotal || 0} 回合`;
+
+  const players = (report.players || [])
+    .slice()
+    .sort((a, b) => (a.teamSide || 0) - (b.teamSide || 0) || (b.rating || 0) - (a.rating || 0));
+  $('post-players').innerHTML = players
+    .map(
+      (p) => `<div class="post-row">
+        <span class="n" style="color:${p.teamSide === 1 ? '#5b9cf8' : '#e0a44a'}">${escapeHtml(
+          p.nickname || '',
+        )}${p.isMvp ? '<span class="badge mvp">MVP</span>' : ''}${
+        p.isSvp ? '<span class="badge svp">SVP</span>' : ''
+      }</span>
+        <span class="num">${p.kill || 0}/${p.death || 0}/${p.assist || 0}</span>
+        <span class="num">${Number(p.rating || 0).toFixed(2)}</span>
+        <span class="num">${Math.round(p.adr || 0)}</span>
+      </div>`,
+    )
+    .join('');
+
+  const cmp = report.comparison;
+  $('post-compare').textContent = cmp
+    ? cmp.headline ||
+      (cmp.isCorrect === true ? 'AI 预测命中' : cmp.isCorrect === false ? 'AI 预测落空' : '')
+    : '';
 }
 
 async function loadPaths(artifactId) {

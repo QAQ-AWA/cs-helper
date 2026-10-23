@@ -44,6 +44,16 @@ header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--b
 #ai{white-space:pre-wrap;font-size:13px;color:#c9cfdd;min-height:20px}
 
 .paths{display:grid;gap:8px}
+.score{display:flex;align-items:baseline;gap:10px}
+.score b{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums}
+.post-list{display:grid;margin-top:10px}
+.post-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--line)}
+.post-row:first-child{border-top:0}
+.post-row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.post-row .num{color:var(--muted);font-variant-numeric:tabular-nums;width:52px;text-align:right}
+.badge{font-size:10px;border-radius:4px;padding:1px 4px;margin-left:4px}
+.badge.mvp{background:rgba(224,164,74,.18);color:#e0a44a}
+.badge.svp{background:rgba(91,156,248,.18);color:#5b9cf8}
 .path-row{display:flex;align-items:center;gap:10px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--text);
   font-size:13px;text-align:left}

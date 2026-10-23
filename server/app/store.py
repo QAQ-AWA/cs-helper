@@ -86,6 +86,7 @@ class Session:
     artifact_id: str | None = None
     ai_state: str = "pending"  # pending | running | ready | skipped | failed
     ai_text: str | None = None
+    post_report: dict[str, Any] | None = None
 
     @property
     def key(self) -> str:
@@ -105,6 +106,7 @@ class Session:
             "artifactId": self.artifact_id,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
+            "postReport": self.post_report,
         }
 
 

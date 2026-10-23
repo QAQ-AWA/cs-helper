@@ -116,3 +116,40 @@ class RoomView(BaseModel):
     expiresAt: int
     members: list[dict]
     sessionId: str | None = None
+
+
+class PostMatchReport(BaseModel):
+    """赛后战报，由桌面端从平台接口取回后上报（服务端不重复抓取）。
+
+    结构对齐桌面端的 P5ePostMatchReport；未知字段原样保留并转发，
+    这样客户端加字段不需要服务端同步发版。
+    """
+
+    model_config = {"extra": "allow"}
+
+    matchCode: str = Field(default="", max_length=128)
+    mapName: str = Field(default="", max_length=64)
+    roundTotal: int = Field(default=0, ge=0, le=200)
+    scoreA: int = Field(default=0, ge=0, le=100)
+    scoreB: int = Field(default=0, ge=0, le=100)
+    winnerSide: str | None = Field(default=None, max_length=8)
+    halfScores: dict | None = None
+    demoUrl: str | None = Field(default=None, max_length=2048)
+    mvpUid: str | None = Field(default=None, max_length=64)
+    players: list[dict] = Field(default_factory=list)
+    comparison: dict | None = None
+    isFinished: bool = True
+
+    @field_validator("players")
+    @classmethod
+    def _max_players(cls, value: list[dict]) -> list[dict]:
+        if len(value) > 20:
+            raise ValueError("players cannot exceed 20 entries")
+        return value
+
+    @field_validator("demoUrl")
+    @classmethod
+    def _check_demo_url(cls, value: str | None) -> str | None:
+        if value and not value.startswith(("https://", "http://")):
+            raise ValueError("demoUrl must be an absolute URL")
+        return value
