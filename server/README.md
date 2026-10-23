@@ -1,8 +1,9 @@
-# server — 房间与分发服务（P1）
+# server — 房间与分发服务（P2）
 
-替代 `demo/server/web_server.py`。Flask 版本是全局单例状态机（一个进程同时只能跑一个分析，`/api/analyze` 直接 409），无法承载多房间；这里改成 FastAPI + 每房间独立序号与事件环形缓冲。
+替代上游 `demo/server/web_server.py`。Flask 版本是全局单例状态机（一个进程同时只能跑一个分析，`/api/analyze` 直接 409），无法承载多房间；这里改成 FastAPI + 每房间独立序号与事件环形缓冲。
 
-**P1 只做"能连上、能同步"**：房间、对局上报、画像广播、WebSocket 增量与断线补齐。Demo 解析与 AI 编排在 P2 接入（`RoomHub.report_match` 是挂载点）。
+**已完成**：房间、对局上报、画像广播、WebSocket 增量与断线补齐；Demo 解析任务接入引擎（子进程隔离、进度流、不可变 artifact）。
+**未完成**：AI 编排（P4）、按房间配额、Redis 化。
 
 ## 快速开始
 
@@ -49,6 +50,7 @@ server/
 | GET | `/api/v1/room/network/info` | — | 局域网 IP，供电脑端生成手机链接 |
 | GET | `/api/v1/room/{code}/snapshot` | Bearer | 全量状态（成员/对局/画像/latestSeq） |
 | POST | `/api/v1/match/report?roomCode=` | Bearer | 上报对局，`platform:matchId` 幂等 |
+| GET | `/api/v1/artifacts/{id}` | Bearer | 回放大对象；内容寻址、ETag、gzip |
 | WS | `/ws?token=&lastSeq=` | token | 增量事件；断线按 `lastSeq` 补发 |
 
 错误统一为 `{"code": 1000+, "message": "..."}`，与客户端 `if (json.code !== 0)` 的判断一致。
@@ -70,15 +72,29 @@ server/
 ## 已验证
 
 ```bash
-cd server && python -m pytest tests -q     # 26 passed
+cd server && python -m pytest tests -q     # 33 passed
 ```
 
 另外跑过一次真实 uvicorn 实例的端到端冒烟：建房 → 手机加入 → 上报 → WS 收到 `MATCH_DETECTED/JOB_PROGRESS/PROFILE_READY` → 快照含 3 名选手。
+Demo 任务用真实 `engine/job_runner.py` 验证过子进程链路（进度行、失败原因、退出码）。
 
-## P2 待办
+## Demo 任务
 
-- `jobs.py` 接入 `engine/`：`pipeline.run(..., player_hints=adapters.to_engine_hints(report))`。
-- `artifacts.py`：大对象存储 + ETag + 按玩家懒加载（WS 只发 `artifactId`）。
-- 会话按 `platform:matchId` 全局去重后，仍需按房间做解析配额与取消。
-- `store.py` 换 Redis（接口已按可替换的方式设计，但尚未抽出 Protocol）。
-- 服务端画像补全：目前 `PROFILE_READY.source = "client"`，需接入平台接口后标记为 `"server"`。
+上报后自动触发，按 `platform:matchId` 全局去重：同一场比赛无论几个房间上报，只解析一次。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `CS_HELPER_DEMO` | `1` | 设为 `0` 关闭解析任务 |
+| `CS_HELPER_DEMO_MAX_DEMOS` | `6` | 每个对手取几场 Demo（1–10） |
+| `CS_HELPER_DEMO_MODE` | `normal` | `normal` / `fast`（fast 走进程池并发） |
+| `CS_HELPER_WORK_DIR` | `.cache/jobs` | 每个任务独立的输出目录 |
+| `CS_HELPER_DEMO_DIR` | `engine/demos_opponents` | Demo 缓存（跨任务共享，用于去重） |
+| `CS_HELPER_MAPS_DIR` | `engine/data/maps` | 需先运行 `engine/setup_maps.py` |
+
+流程：`JOB_PROGRESS(stage=demo)` 逐个玩家推进 → 完成后发出 `TACTICAL_PATHS_READY{artifactId}` → 客户端凭 token 拉 `/api/v1/artifacts/{id}`。
+地图资源缺失时返回 `ROOM_ERROR{code:2002}`，平台不是 5E 时任务标记 `skipped`。
+
+## 为什么解析跑子进程
+
+`engine/config.py` 在 **import 时**就从环境变量绑定 `OUTPUT_DIR`，多房间并发会互相覆盖 `player_{domain}.json`。
+与其把目录参数穿过 1615 行 pipeline，不如每个任务起一个进程、用环境变量注入目录：同时获得可靠取消（`terminate()`）与崩溃隔离。

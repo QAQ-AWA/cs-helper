@@ -82,6 +82,8 @@ class Session:
     updated_at: float
     profile_state: str = "pending"  # pending | running | ready | failed
     profiles: list[dict[str, Any]] | None = None
+    demo_state: str = "pending"  # pending | running | ready | skipped | failed
+    artifact_id: str | None = None
 
     @property
     def key(self) -> str:
@@ -97,6 +99,8 @@ class Session:
             "phase": self.report.get("phase", "ready"),
             "countdownSeconds": self.report.get("countdownSeconds"),
             "profileState": self.profile_state,
+            "demoState": self.demo_state,
+            "artifactId": self.artifact_id,
         }
 
 

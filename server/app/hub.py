@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .artifacts import ArtifactStore
+from .engine_runner import DemoRunner
 from .events import Action
 from .jobs import JobManager
 from .security import TokenService
@@ -16,11 +18,19 @@ class RoomNotFound(LookupError):
 
 
 class RoomHub:
-    def __init__(self, store: Store, tokens: TokenService, ws: ConnectionManager) -> None:
+    def __init__(
+        self,
+        store: Store,
+        tokens: TokenService,
+        ws: ConnectionManager,
+        artifacts: ArtifactStore | None = None,
+        demo_runner: DemoRunner | None = None,
+    ) -> None:
         self.store = store
         self.tokens = tokens
         self.ws = ws
-        self.jobs = JobManager(self.emit_session)
+        self.artifacts = artifacts or ArtifactStore()
+        self.jobs = JobManager(self.emit_session, self.artifacts, demo_runner)
 
     # -- events --------------------------------------------------------
     def emit(self, room: Room, action: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -92,6 +102,7 @@ class RoomHub:
         self.store.bind(room, session)
         self.emit_session(session, Action.MATCH_DETECTED, session.to_wire())
         self.jobs.submit_profile(session)
+        self.jobs.submit_demo(session)
         return session, created
 
     def shutdown(self) -> None:

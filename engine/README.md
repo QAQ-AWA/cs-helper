@@ -14,6 +14,7 @@
 | `combat.py` | demo/server | K/D 与 AWP 持枪率 |
 | `config.py` | demo/server | 环境变量配置（`CS_SCOUT_*`） |
 | `setup_maps.py` | demo/server | 一次性生成 `data/maps/<map>/{radar.png,meta.json}` |
+| `job_runner.py` | 本项目新增 | 子进程入口：stdin 收任务、stdout 发 JSONL、退出码表成败 |
 
 **未迁入**（有意为之）：
 
@@ -65,8 +66,19 @@ pipeline.run(
 
 `player_hints` 必须是完整的 `username + domain + steamid`；任一缺失或非法时传 `None`，让引擎回退到自身搜索（见 `adapters.to_engine_hints`）。
 
-## 待办（P2）
+## 子进程入口
 
-- `config.py` 的模块级 env → `EngineConfig` 对象，`OUTPUT_DIR` 按 job 隔离（当前全局目录会在并发任务间相互覆盖）。
-- `cleanup_demos` 的全局 30GB 阈值 → 按租户配额。
-- `.demo_index.json` 的读写 → 注入 `DemoIndex` 接口（Redis 实现）。
+服务端不直接 import 本目录，而是执行 `job_runner.py`：
+
+```bash
+echo '{"usernames":["Alpha"],"mapName":"de_mirage","outputDir":"/tmp/o","demoDir":"/tmp/d","mapsDir":"/tmp/m"}' \
+  | python job_runner.py
+```
+
+它在 import 任何引擎模块**之前**把 `CS_SCOUT_*_DIR` 写进环境变量，因此每个任务的输出目录互不干扰。stdout 只输出 JSON 行（`progress` / `done` / `error`），日志走 stderr。
+
+## 待办（P2 之后）
+
+- `config.py` 仍从环境变量读路径；若将来需要在同一进程内跑多任务，再抽 `EngineConfig` 对象。
+- `cleanup_demos` 的全局 30GB 阈值仍是单租户假设，多房间时应改为配额。
+- `.demo_index.json` 的读写尚未抽成可注入的 `DemoIndex`（目前跨任务共享缓存，行为正确）。

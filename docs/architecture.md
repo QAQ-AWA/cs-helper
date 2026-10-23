@@ -90,12 +90,12 @@
 | --- | --- | --- |
 | P0 ✅ | 抽离 `engine/`、建契约、冻结 legacy | 引擎测试独立通过 |
 | P1 ✅ | 房间、上报、画像广播、WS 续传 | 手机 3s 内看到十人名单；断网 30s 可补齐 |
-| P2 | 接引擎：`pipeline.run(player_hints=...)`、artifacts、配额 | 同 matchId 两个房间只解析一次 |
+| P2 ✅ | 接引擎：子进程隔离、进度流、artifacts、按 matchId 去重 | 同 matchId 两个房间只解析一次 |
 | P3 | PWA：选手详情、轨迹回放、AI 卡、赛后 | 4G 首屏 < 3s |
 | P4 | AI 上云：Node worker 复用客户端 TS 实现 | 5 端只产生 1 次大模型调用 |
 | P5 | 归档、观测、配额、灰度 | 连续 7 天无 P1 故障 |
 
-P2 的第一件事不是接 pipeline，而是把 `engine/config.py` 的全局 `OUTPUT_DIR` 按 job 隔离——否则并发任务会互相覆盖 `player_{domain}.json`。
+P2 的目录隔离没有改 pipeline，而是让每个解析任务跑在子进程里、用环境变量注入 `OUTPUT_DIR`——`engine/config.py` 是在 import 时读取路径的，改参数要穿透 1600 行，改进程边界只需一个入口脚本，还顺带得到可靠取消与崩溃隔离。
 
 ## 8. 风险
 

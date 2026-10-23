@@ -7,13 +7,14 @@ Demo parsing and AI orchestration plug into ``RoomHub.report_match`` later.
 from __future__ import annotations
 
 import asyncio
+import gzip
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -21,6 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import events
+from .artifacts import ArtifactStore
+from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
 from .hub import RoomHub, RoomNotFound
 from .models import MatchReport, RoomCreate, RoomJoin
@@ -51,11 +54,20 @@ def create_app(
     secret: str | None = None,
     store: Store | None = None,
     room_ttl: int | None = None,
+    demo_runner: DemoRunner | None | str = "auto",
+    artifacts: ArtifactStore | None = None,
 ) -> FastAPI:
     store = store or Store(**({"room_ttl": room_ttl} if room_ttl else {}))
     tokens = TokenService(secret)
     ws_manager = ConnectionManager()
-    hub = RoomHub(store, tokens, ws_manager)
+    artifact_store = artifacts or ArtifactStore()
+    if demo_runner == "auto":
+        demo_runner = (
+            SubprocessDemoRunner()
+            if os.getenv("CS_HELPER_DEMO", "1").strip() not in {"0", "false", "no"}
+            else None
+        )
+    hub = RoomHub(store, tokens, ws_manager, artifact_store, demo_runner)  # type: ignore[arg-type]
     limiter = JoinLimiter()
 
     @asynccontextmanager
@@ -158,6 +170,32 @@ def create_app(
     def room_snapshot(code: str, authorization: str | None = Header(default=None)):
         room, _member = require_room(authorization, code)
         return ok(hub.room_state(room))
+
+    # -- artifacts ------------------------------------------------------
+    @app.get("/api/v1/artifacts/{artifact_id}")
+    def get_artifact(
+        artifact_id: str,
+        request: Request,
+        authorization: str | None = Header(default=None),
+        if_none_match: str | None = Header(default=None),
+    ):
+        require_room(authorization)
+        artifact = hub.artifacts.get(artifact_id)
+        if artifact is None:
+            raise ApiError("对象不存在或已过期", code=1007, status=404)
+        if if_none_match and if_none_match.strip() == artifact.etag:
+            return Response(status_code=304, headers={"ETag": artifact.etag})
+
+        body = artifact.body
+        headers = {
+            "ETag": artifact.etag,
+            "Cache-Control": "private, max-age=3600",
+            "Vary": "Accept-Encoding",
+        }
+        if "gzip" in (request.headers.get("accept-encoding") or "").lower():
+            body = gzip.compress(body, compresslevel=6)
+            headers["Content-Encoding"] = "gzip"
+        return Response(content=body, media_type=artifact.media_type, headers=headers)
 
     # -- match ----------------------------------------------------------
     @app.post("/api/v1/match/report")
