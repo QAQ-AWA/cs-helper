@@ -1,0 +1,5 @@
+# 引擎运行时依赖（与 demo/server 保持一致）
+requests>=2.31
+pandas==3.0.3
+numpy==2.4.6
+demoparser2==0.41.4

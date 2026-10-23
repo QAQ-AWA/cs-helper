@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+Thumbs.db
+
+# 引擎运行时产物
+engine/output/
+engine/demos_opponents/
+engine/data/maps/
+engine/.demo_index.json
+
+# 本地配置
+.env
+.env.local
+
+# 编辑器 / 工具
+.vscode/
+.idea/
+.workbuddy/
+
+# 本地草稿（不随仓库分发）
+/CS-合并方案与架构设计.md

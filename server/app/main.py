@@ -1,0 +1,236 @@
+"""CS Helper relay server (P1).
+
+Scope: rooms, match upload, profile broadcast, WebSocket fan-out.
+Demo parsing and AI orchestration plug into ``RoomHub.report_match`` later.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from . import events
+from .events import Action
+from .hub import RoomHub, RoomNotFound
+from .models import MatchReport, RoomCreate, RoomJoin
+from .security import JoinLimiter, TokenService, lan_addresses
+from .store import Store
+from .ws import Connection, ConnectionManager
+
+logging.basicConfig(level=logging.INFO, format="[%(name)s] %(levelname)s %(message)s")
+log = logging.getLogger("cs-helper")
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+class ApiError(Exception):
+    def __init__(self, message: str, code: int = 1000, status: int = 400) -> None:
+        super().__init__(message)
+        self.message = message
+        self.code = code
+        self.status = status
+
+
+def ok(data: dict | None = None) -> JSONResponse:
+    return JSONResponse({"code": 0, "message": "ok", "data": data or {}})
+
+
+def create_app(
+    *,
+    secret: str | None = None,
+    store: Store | None = None,
+    room_ttl: int | None = None,
+) -> FastAPI:
+    store = store or Store(**({"room_ttl": room_ttl} if room_ttl else {}))
+    tokens = TokenService(secret)
+    ws_manager = ConnectionManager()
+    hub = RoomHub(store, tokens, ws_manager)
+    limiter = JoinLimiter()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        ws_manager.bind_loop(asyncio.get_running_loop())
+        if tokens.ephemeral:
+            log.warning("CS_HELPER_SERVER_SECRET is unset; tokens die with this process")
+        log.info("relay ready")
+        try:
+            yield
+        finally:
+            hub.shutdown()
+            await ws_manager.shutdown()
+
+    app = FastAPI(title="CS Helper Relay", version="0.1.0", lifespan=lifespan)
+    app.state.hub = hub
+    app.state.store = store
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # -- error envelope -------------------------------------------------
+    @app.exception_handler(ApiError)
+    async def _api_error(_request: Request, exc: ApiError):
+        return JSONResponse({"code": exc.code, "message": exc.message}, status_code=exc.status)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(_request: Request, exc: StarletteHTTPException):
+        return JSONResponse(
+            {"code": exc.status_code * 10, "message": str(exc.detail)},
+            status_code=exc.status_code,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(_request: Request, exc: RequestValidationError):
+        first = exc.errors()[0] if exc.errors() else {}
+        field = ".".join(str(part) for part in first.get("loc", ())[1:]) or "body"
+        return JSONResponse(
+            {"code": 1005, "message": f"{field}: {first.get('msg', 'invalid')}"},
+            status_code=422,
+        )
+
+    # -- auth -----------------------------------------------------------
+    def require_room(authorization: str | None, room_code: str | None = None):
+        token = ""
+        if authorization and authorization.lower().startswith("bearer "):
+            token = authorization[7:].strip()
+        try:
+            room, member = hub.authenticate(token)
+        except RoomNotFound:
+            raise ApiError("房间凭证无效或已过期", code=1001, status=401) from None
+        if room_code and room.code != room_code.strip().upper():
+            raise ApiError("凭证与房间不匹配", code=1001, status=403)
+        return room, member
+
+    # -- room endpoints -------------------------------------------------
+    @app.post("/api/v1/room/create")
+    def room_create(payload: RoomCreate):
+        room, _member, token, expires_at = hub.create_room(payload.creatorNickname, payload.deviceType)
+        return ok(
+            {
+                "roomCode": room.code,
+                "roomId": room.room_id,
+                "token": token,
+                "expiresAt": expires_at,
+                "joinUrl": f"/?room={room.code}",
+            }
+        )
+
+    @app.post("/api/v1/room/join")
+    def room_join(payload: RoomJoin, request: Request):
+        client = request.client.host if request.client else "unknown"
+        if not limiter.allow(client):
+            raise ApiError("尝试过于频繁，请稍后再试", code=1004, status=429)
+        try:
+            room, _member, token, expires_at = hub.join_room(
+                payload.roomCode, payload.nickname, payload.deviceType
+            )
+        except RoomNotFound:
+            raise ApiError("房间不存在或已过期", code=1002, status=404) from None
+        return ok({"roomCode": room.code, "roomId": room.room_id, "token": token, "expiresAt": expires_at})
+
+    @app.get("/api/v1/room/network/info")
+    def network_info(request: Request):
+        ips = lan_addresses()
+        port = request.url.port or 8787
+        return ok(
+            {
+                "ips": ips,
+                "port": port,
+                "urls": [f"http://{ip}:{port}" for ip in ips],
+            }
+        )
+
+    @app.get("/api/v1/room/{code}/snapshot")
+    def room_snapshot(code: str, authorization: str | None = Header(default=None)):
+        room, _member = require_room(authorization, code)
+        return ok(hub.room_state(room))
+
+    # -- match ----------------------------------------------------------
+    @app.post("/api/v1/match/report")
+    def match_report(
+        payload: MatchReport,
+        roomCode: str = Query(..., min_length=4, max_length=12),
+        authorization: str | None = Header(default=None),
+        idempotency_key: str | None = Header(default=None),
+    ):
+        room, _member = require_room(authorization, roomCode)
+        if payload.protocolVersion > events.PROTOCOL_VERSION:
+            raise ApiError("客户端协议版本高于服务端，请升级服务端", code=1006, status=409)
+        session, created = hub.report_match(room, payload.model_dump())
+        return ok(
+            {
+                "sessionId": session.id,
+                "matchId": session.match_id,
+                "platform": session.platform,
+                "created": created,
+                "idempotencyKey": idempotency_key,
+                "profileState": session.profile_state,
+            }
+        )
+
+    # -- websocket ------------------------------------------------------
+    @app.websocket("/ws")
+    async def ws_endpoint(websocket: WebSocket, token: str = "", lastSeq: int = 0):
+        try:
+            room, member = hub.authenticate(token)
+        except RoomNotFound:
+            await websocket.close(code=4401)
+            return
+
+        await websocket.accept()
+        connection = Connection(websocket, room.code, member.id)
+
+        # Replay first, snapshot last: the snapshot is the authoritative tail
+        # and carries the sequence the client should resume from.
+        if lastSeq > 0 and store.can_replay(room, lastSeq):
+            for event in store.events_since(room, lastSeq):
+                connection.enqueue(event)
+        connection.enqueue(
+            events.envelope(Action.ROOM_STATE_SYNC, hub.room_state(room), room.seq, now=time.time())
+        )
+        connection.start()
+        ws_manager.register(connection)
+        hub.on_connect(room, member)
+
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            log.debug("websocket closed unexpectedly", exc_info=True)
+        finally:
+            ws_manager.unregister(connection)
+            await connection.stop()
+            hub.on_disconnect(room.code, member)
+
+    # -- misc -----------------------------------------------------------
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok", "rooms": len(store._rooms), "protocolVersion": events.PROTOCOL_VERSION}
+
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+        @app.get("/")
+        def index():
+            return FileResponse(STATIC_DIR / "mobile.html")
+
+    return app
+
+
+app = create_app(secret=os.getenv("CS_HELPER_SERVER_SECRET", ""))

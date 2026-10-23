@@ -1,0 +1,5 @@
+# P1 relay server. The demo engine pulls its own heavier deps from engine/requirements.txt.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+requests>=2.31
