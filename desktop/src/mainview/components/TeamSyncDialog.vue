@@ -238,7 +238,7 @@ function handleDisconnect() {
             <input
               v-model="inputServerUrl"
               class="mt-1 w-full rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text focus:border-primary focus:outline-none"
-              placeholder="http://localhost:3000 或局域网/云端IP"
+              placeholder="http://127.0.0.1:8787 或局域网/云端IP"
             />
           </div>
 

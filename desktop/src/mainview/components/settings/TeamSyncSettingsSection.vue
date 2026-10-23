@@ -115,17 +115,17 @@ function handleCopyLink() {
             <input
               v-model="serverUrlInput"
               class="flex-1 rounded-md border border-border bg-elevated px-3 py-2 text-xs focus:border-primary focus:outline-none"
-              placeholder="http://localhost:3000 或局域网/云端地址"
+              placeholder="http://127.0.0.1:8787 或局域网/云端地址"
             />
             <button
               class="rounded-md border border-border bg-elevated px-3 py-2 text-xs hover:bg-surface-hover"
-              @click="serverUrlInput = 'http://localhost:3000'"
+              @click="serverUrlInput = 'http://127.0.0.1:8787'"
             >
               设为默认
             </button>
           </div>
           <p class="mt-1 text-[11px] text-fg-muted">
-            本地单机运行填 http://localhost:3000；多台电脑局域网开黑填主机局域网 IP，云端部署填 VPS 公网域名。
+            本机运行服务端填 http://127.0.0.1:8787；多台电脑局域网开黑填主机局域网 IP，云端部署填 VPS 公网域名。
           </p>
         </div>
 
