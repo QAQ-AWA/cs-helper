@@ -379,6 +379,36 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 
 注意 `vue-tsc` 现存 **41 个存量错误**（`useCounterStrafing` 缺模块、`post-match.test.ts` 的 `stabilityReason` 等），**还不能接进 CI**，否则必挂。新代码至少要保证不新增错误。
 
+## 真实对局测试清单（首次验收）
+
+前置：**必须用 `7d1aded` 及之后的构建**（`a853bd9` 之前的 exe 没有服务端分析面板与同步设置）。
+
+1. **起服务端**（带 AI key，否则战术/开局会显示「未配置 AI key」）：
+   ```bash
+   CS_HELPER_SERVER_SECRET=... CS_HELPER_AI_KEY=... CS_HELPER_AI_MODEL=deepseek-flash \
+   CS_HELPER_DEV=1 CS_HELPER_DEMO=1 \
+   CS_HELPER_DEMO_DIR=I:/workbuddy/cn-code/cs-helper/.cache/realjob/demos \
+   .venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8787 --app-dir server
+   ```
+2. **客户端设置 → 同步**：地址填 `http://<局域网IP>:8787`（不是 127.0.0.1，手机要访问），
+   点「创建房间」或输入房间码加入。标题栏「小队协同」应变绿并显示房间码。
+3. **启动页**：选 5E 客户端路径 → 拉起 5E → 等 hook（`MatchEmptyState` 应显示等待动画）。
+4. **开始匹配**：检测到对局后应进入 `MatchWorkspace`，阵容页 10 人带 Rating/ADR/K/D/HS%。
+5. **手机**：`http://<局域网IP>:8787/?room=MAIN` → 阵容、轨迹、AI。
+6. **分析页**：战术分析（服务端 AI，首字约 0.5s）、开局预判（轨迹就绪后自动跑）。
+7. **赛后**：赛后页点「拉取战报」→ 手机赛后卡片同步出现（战报由桌面端拉取后上报）。
+8. **重启服务端**：桌面端自动重连，历史里能看到这一局（会话已落盘）。
+
+### 常见失败点
+
+| 现象 | 先查 |
+| --- | --- |
+| 阵容页空 | 服务端日志有没有 `POST /api/v1/match/report 200`；`curl /api/v1/room/MAIN/snapshot` |
+| 检测不到对局 | 5E 是否由客户端拉起、9222 端口是否被占用 |
+| 轨迹一直「解析中」 | 首次 10 人 1–3 分钟是正常的（下载瓶颈），看 `/healthz` 的 `artifacts` 是否增长 |
+| AI 卡片空白 | 服务端是否配了 `CS_HELPER_AI_KEY`；日志里的 2005 |
+| 手机连不上 | 设置页的手机链接是否是 `192.168.x.x`（不是 198.18.x 代理地址） |
+
 ## 未做 / 待验证
 
 - **桌面端只是"改造"，不是推倒重写**：`src/mainview` 仍有 2.7 万行，包含完美世界登录、平台选择、留言板、本地 AI 等本项目用不到的面。本轮换掉了「分析」页的数据来源，但 App 外壳、平台选择、设置页都还是旧的。彻底重写需要能真正跑起来的窗口做视觉验收（当前环境没有 Rust 工具链、没有显示器），建议分三步：① 删掉 perfect/comments/本地 AI 三条支线；② 收敛成单窗口「连接 → 对局 → 服务端结果」；③ 逐页做真机走查。
