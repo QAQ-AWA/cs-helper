@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n';
 import { animate } from 'animejs';
 import {
   AlertTriangle,
-  ArrowLeft,
   FolderOpen,
   Info,
   Loader2,
@@ -263,10 +262,6 @@ function formatLaunchError(message: string): string {
     .replace(/^TERMINATE_5E_FAILED:\s*/, ''));
 }
 
-function goBack() {
-  teardownProbe();
-  emit('back');
-}
 
 async function launch() {
   if (!canLaunch.value) return;
@@ -364,18 +359,6 @@ onBeforeUnmount(() => {
   <div ref="containerRef" class="relative flex min-h-full flex-col items-center justify-center overflow-hidden p-6 sm:p-12">
     <div class="pointer-events-none absolute inset-0 bg-base" aria-hidden="true">
       <div class="absolute left-1/2 top-1/2 h-[50vw] w-[50vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent opacity-[0.06] blur-[100px]"></div>
-    </div>
-
-    <div class="absolute left-6 top-6 z-20 sm:left-10 sm:top-10">
-      <button
-        type="button"
-        class="group flex cursor-pointer items-center gap-1.5 rounded-full bg-surface/50 px-4 py-2.5 text-[13px] font-medium text-fg-secondary backdrop-blur-md transition-colors duration-200 hover:bg-elevated hover:text-fg shadow-sm"
-        :disabled="launching"
-        @click="goBack"
-      >
-        <ArrowLeft class="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
-        {{ t('p5e.changePlatform') }}
-      </button>
     </div>
 
     <div class="p5e-launch__panel relative z-10 mt-6 w-full max-w-md rounded-4xl border border-border/40 bg-surface/60 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] backdrop-blur-xl">
