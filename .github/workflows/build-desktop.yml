@@ -1,0 +1,96 @@
+name: Build Desktop (Windows)
+
+# 桌面端在 desktop/ 子目录里，仓库根的 workflows 才会被执行，
+# 所以 CI 必须放在这里，并用 working-directory 指向 desktop。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build cs-match-helper.exe
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Build executable
+        run: npm run build:exe -- --ci
+
+      - name: Verify artifact
+        shell: pwsh
+        run: |
+          # working-directory 已是 desktop
+          $exe = "src-tauri/target/release/cs-match-helper.exe"
+          if (-not (Test-Path $exe)) { throw "executable not found: $exe" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 2)
+          Write-Host "built: $exe ($mb MB)"
+          "SIZE_MB=$mb" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-match-helper-windows
+          path: desktop/src-tauri/target/release/cs-match-helper.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      # 每次 main 构建都更新同一个预发布，方便直接下载最新包
+      - name: Publish rolling prerelease
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest build
+          body: |
+            由 GitHub Actions 自动构建（commit ${{ github.sha }}）。
+            产物大小：${{ env.SIZE_MB }} MB。
+          prerelease: true
+          make_latest: false
+          files: desktop/src-tauri/target/release/cs-match-helper.exe
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/src-tauri/target/release/cs-match-helper.exe
+          generate_release_notes: true
