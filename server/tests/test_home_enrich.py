@@ -172,6 +172,28 @@ def test_rotated_signature_is_explained_and_never_blocks():
     assert data["match"]["homeError"] == SIGNATURE_HINT
 
 
+def test_complete_client_upload_skips_the_gateway():
+    """The desktop already sends its season sheet; refetching it is pure waste."""
+
+    home = FakeHome()
+    app, client = _client(home)
+    report = make_report()
+    for team in report["teams"].values():
+        for player in team:
+            player["stats"] = {"rating": 1.1, "kd": 1.0, "seasonAdr": 80.0, "matchesPlayed": 40}
+    with client:
+        room = client.post("/api/v1/room/create", json={}).json()["data"]
+        client.post(
+            f"/api/v1/match/report?roomCode={room['roomCode']}",
+            json=report,
+            headers={"Authorization": f"Bearer {room['token']}"},
+        )
+        data = _wait(client, room, lambda snap: (snap["match"] or {}).get("homeState") == "ready")
+
+    assert home.calls == 0
+    assert data["match"]["homeCoverage"] == 2
+
+
 def test_home_can_be_switched_off():
     app = create_app(
         secret="test-secret", demo_runner=None, room_mode="multi", ai_client=None, home_client=None

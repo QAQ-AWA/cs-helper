@@ -7,12 +7,14 @@ import type { useAiAnalysis } from '../composables/useAiAnalysis';
 import type { useComments } from '../composables/useComments';
 import type { useMatchHistory } from '../composables/useMatchHistory';
 import type { useP5eCdp } from '../composables/useP5eCdp';
+import type { useTeamSync } from '../composables/useTeamSync';
 import type { P5ePostMatchReport } from '@platforms/5e/post-match';
 import MatchEmptyState from '../components/MatchEmptyState.vue';
 import MatchFeaturedPanel from '../components/MatchFeaturedPanel.vue';
 
 const props = defineProps<{
   ai: ReturnType<typeof useAiAnalysis>;
+  sync: ReturnType<typeof useTeamSync>;
   comments: ReturnType<typeof useComments>;
   matches: MatchRecord[];
   watcher: WatcherStatus;
@@ -46,6 +48,7 @@ function onPostMatchUpdated(report: P5ePostMatchReport) {
     <div v-if="latestMatch" class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <MatchFeaturedPanel
         :ai="ai"
+        :sync="sync"
         :comments="comments"
         :match="latestMatch"
         :active="active"

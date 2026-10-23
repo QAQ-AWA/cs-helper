@@ -56,6 +56,8 @@ def test_missing_metrics_are_declared_instead_of_invented():
         "ADR",
         "RWS",
         "KAST",
+        "首杀成功率",
+        "残局胜率",
         "爆头率",
         "胜率",
     }

@@ -10,13 +10,14 @@ import { isAiAnalysisActive, type AiPlayerSignal } from '@core/ai/types';
 import { isPerfectAiAnalysisReady } from '@core/ai/perfect-readiness';
 import { formatAiWinnerCapsule } from '@core/ai/display';
 import type { useAiAnalysis } from '../composables/useAiAnalysis';
+import type { useTeamSync } from '../composables/useTeamSync';
 import type { useComments } from '../composables/useComments';
 import { useMatchCountdown } from '../composables/useMatchCountdown';
 import { useMatchHeaderMetaCompaction } from '../composables/useMatchHeaderMetaCompaction';
 import { teamSyncClient } from '@core/sync/sync-client';
 import { useMatchRevealAnimation } from '../composables/useMatchRevealAnimation';
 import { useTeamTableColumns } from '../composables/useTeamTableColumns';
-import AiAnalysisPanel from './AiAnalysisPanel.vue';
+import ServerAnalysisPanel from './ServerAnalysisPanel.vue';
 import TeamDataBoard from './TeamDataBoard.vue';
 import TeamCompareBoard from './TeamCompareBoard.vue';
 import P5ePostMatchPanel from './P5ePostMatchPanel.vue';
@@ -29,6 +30,7 @@ import { resolveSelfSide, sideRelationshipLabel, type AiSide } from '@core/ai/pe
 const props = defineProps<{
   match: MatchRecord;
   ai: ReturnType<typeof useAiAnalysis>;
+  sync: ReturnType<typeof useTeamSync>;
   comments: ReturnType<typeof useComments>;
   active?: boolean;
   /** 历史回看：不触发 AI、不显示准备倒计时 */
@@ -686,20 +688,7 @@ function eloCompareTitle(
           @report-updated="onPostMatchUpdated"
         />
         <TacticalPathsPanel v-else-if="activeTab === 'paths'" key="paths" />
-        <AiAnalysisPanel
-          v-else
-          key="ai"
-          :match="match"
-          :ai="ai"
-          :history-mode="isHistory"
-          :highlighted-side="highlightedSide"
-          :focused-steam-id="focusedAiSteamId"
-          :self-side="selfSide"
-          @highlight-side="onHighlightSide"
-          @open-settings="emit('openSettings')"
-          @analyze="runAnalysis"
-          @stop="stopHistoryAnalysis"
-        />
+        <ServerAnalysisPanel v-else key="ai" :sync="sync" />
       </Transition>
     </div>
     </div>

@@ -115,9 +115,9 @@ CS_HELPER_HISTORY_DAYS=7           # 历史保留天数，到期连轨迹一起�
 CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
 
 # 测试
-cd server && pytest tests -q    # 120
+cd server && pytest tests -q    # 123
 cd engine && pytest tests -q    # 111 passed, 10 skipped（需 328MB 集成 demo）
-cd desktop && npx vitest run    # 284
+cd desktop && npx vitest run    # 288
 ```
 
 ## 已踩过的坑（修过，勿再犯）
@@ -156,7 +156,38 @@ cd desktop && npx vitest run    # 284
 
 ## 功能深化（本轮）
 
-### 0. 数据到底从哪来
+### 0.1 数据上报：修掉"从来没上传过统计"
+
+`desktop/src/core/sync/report-builder.ts` 读的是 `player.stats.rating` / `player.steamId64` / `player.platformUserId`——这些字段在 `MatchPlayer` 上**根本不存在**（真实字段是 `player.rating` / `player.steamId` / `player.platformBoardId`）。`if (player.stats)` 恒为 false，所以 **`payload.stats` 从来没有被设置过**，服务端一直只收到昵称和 steamid。
+
+为什么没被发现：`vite build` 走 esbuild，不做类型检查；单测用的假数据也照着错字段写，所以测试是绿的。`npx tsc --noEmit` 能直接看到十几条 `Property 'stats' does not exist on type 'MatchPlayer'`。
+
+修复后上报的是完整统计（有就带，没有就不带）：
+
+| 分组 | 字段 |
+| --- | --- |
+| 核心 | `rating` `kd` `headshotRate` `winRate` `matchesPlayed` `rankLevel` |
+| 赛季 | `seasonRating` `seasonAdr` `seasonRws` `seasonKast` |
+| 首杀/残局/补枪 | `firstKillRate` `clutchWinRate` `entryKillRatio` `tradeFragRate` |
+| 状态 | `recentWinRate` `recentResults`(WWLWL) `recentRatings` `continuedWins` |
+| 当前地图 | `mapWinRate` `mapMatches` `mapSampleLow` |
+| 身份 | `elo` `eloChange` `rankNum` `rankDesc` |
+| 原始计数 | `kills` `deaths` `assists` `mvpCount` |
+
+- `platformUserId` 现在取 `platformBoardId`（5E domain），引擎可以跳过昵称搜索直接命中，不再每次回退到模糊查找。
+- `partyTag` 取 `troopTeamId`，但 **0 表示"无组队"**，不能当标签用。
+- **百分比只在边界转换一次**：5E 解析器给的是 0-1 小数（`hsRate`/`seasonWinRate`/`kast`），UI 显示的是 48%，服务端基准线也按百分数写。混在一份 JSON 里模型必然读错，所以在 `pct()` 里统一——不是"为了统一而统一"，是同一个量纲才能比较。
+
+服务端对应收紧：`partyTag` 推断要求**同一侧 ≥2 人且另一侧 0 人**，否则整桌同一个 troop id 会把边判反。
+
+### 0.2 服务端统一分析，桌面端只负责展示
+
+- `useTeamSync` 现在维护 `serverMatch`（aiText / tacticsText / mySide / 三态）与 `serverProfiles`，并暴露 `setAnalysisSide()`。
+- 新增 `ServerAnalysisPanel.vue`：状态胶囊（画像/赛季/轨迹/战术/开局）+ 我方阵营切换 + 战术分析 + 开局预判 + 赛季缺口提示。
+- `MatchFeaturedPanel` 的「分析」标签从客户端 `AiAnalysisPanel` 换成 `ServerAnalysisPanel`——**AI 只在服务端跑**，桌面端看到的是同一份结果。
+- 客户端原有的本地 AI 代码仍在（`src/core/ai/*`、`useAiAnalysis`），保留给离线/独立使用；要彻底删掉需要先做一轮真机视觉验收，见"未做"。
+
+### 0.3 数据从哪来（签名网关）
 
 | 数据 | 来源 | 谁在抓 |
 | --- | --- | --- |
@@ -224,13 +255,13 @@ cd desktop && npx vitest run    # 284
 
 ## 未做 / 待验证
 
-- **签名网关的长期有效性**：密钥硬编码在 5E 前端产物里，5E 改版即失效。已做可降级 + 提示，但**没有自动发现新密钥**的能力，失效后需要人工从 5E 前端产物里重新提取并改 `engine/home_client.py`。
-- **开局预判未接真实模型**：本轮环境没有 `CS_HELPER_AI_KEY`，只验证了提示词结构与真实画像数据，`tacticsState` 落在 `skipped`。
-- **`mySide` 桌面端未上报**：桌面端既没有 `isSelf` 也没有 `partyTag`，靠手机端手动选或 ID 库自动判。
-- **包点映射只验证了 mirage**：326/327 的 A/B 约定按 CS2 实体顺序推断，其他图若出现反向需在 `parse.BOMBSITE_LABELS` 按图覆盖。
-- **历史习惯聚合**：现在是单场轨迹回放 + 单场开局画像；跨场聚合（同一对手多场叠加）还没做。
-- 真机视觉：手机渲染逻辑有无头断言保证不崩，但配色/缩放/手感未做真机走查。
-- 桌面端 AI 面板未订阅 `phase:"thinking"`，也没订阅 `AI_TACTICS_*`。
+- **桌面端只是"改造"，不是推倒重写**：`src/mainview` 仍有 2.7 万行，包含完美世界登录、平台选择、留言板、本地 AI 等本项目用不到的面。本轮换掉了「分析」页的数据来源，但 App 外壳、平台选择、设置页都还是旧的。彻底重写需要能真正跑起来的窗口做视觉验收（当前环境没有 Rust 工具链、没有显示器），建议分三步：① 删掉 perfect/comments/本地 AI 三条支线；② 收敛成单窗口「连接 → 对局 → 服务端结果」；③ 逐页做真机走查。
+- **桌面端存在历史类型错误**：`npx tsc --noEmit` 报十几条（`useCounterStrafing` 引用了不存在的模块、若干隐式 any）。CI 只跑 vitest + vite build，不跑 tsc，所以一直没暴露。建议把 `tsc --noEmit` 加进 CI，但需要先清完存量。
+- **`useCounterStrafing*` 是死代码**：依赖的 `@core/counter-strafing/*` 模块已不存在，未被任何视图引用，可直接删。
+- **签名网关的长期有效性**：密钥硬编码在 5E 前端产物里，5E 改版即失效。已做可降级 + 提示，但没有自动发现新密钥的能力。
+- **开局预判未接真实模型**：环境没有 `CS_HELPER_AI_KEY`，只验证了提示词结构与真实画像数据。
+- **包点映射只验证了 mirage**：326/327 的 A/B 约定按 CS2 实体顺序推断。
+- **历史习惯聚合**：跨场聚合（同一对手多场叠加）还没做。
 - 328MB 集成 demo 缺失，engine 有 10 个用例 skip。
 
 ## 建议下一步

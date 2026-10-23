@@ -66,9 +66,17 @@ def resolve_side(
     for side in ("ct", "t"):
         if any(player.get("isSelf") for player in teams.get(side) or []):
             return side, "self"
-    for side in ("ct", "t"):
-        if any(player.get("partyTag") for player in teams.get(side) or []):
-            return side, "party"
+
+    # A party tag is only evidence when it is unambiguous: at least two players
+    # share it and none of them sit on the other side. Lobbies that hand every
+    # player the same troop id must not silently pick a side.
+    tagged = {
+        side: [p for p in teams.get(side) or [] if p.get("partyTag")]
+        for side in ("ct", "t")
+    }
+    sides_with_tags = [side for side, members in tagged.items() if members]
+    if len(sides_with_tags) == 1 and len(tagged[sides_with_tags[0]]) >= 2:
+        return sides_with_tags[0], "party"
     return None, None
 
 

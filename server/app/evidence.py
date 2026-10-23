@@ -38,6 +38,8 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
     "seasonAdr": {"label": "ADR", "tolerance": 3.0, "digits": 1},
     "seasonRws": {"label": "RWS", "tolerance": 0.5, "digits": 1},
     "seasonKast": {"label": "KAST", "tolerance": 1.5, "digits": 1},
+    "firstKillRate": {"label": "首杀成功率", "tolerance": 3.0, "digits": 1},
+    "clutchWinRate": {"label": "残局胜率", "tolerance": 3.0, "digits": 1},
     "headshotRate": {"label": "爆头率", "tolerance": 2.0, "digits": 1},
     "winRate": {"label": "胜率", "tolerance": 2.0, "digits": 1},
 }
@@ -48,6 +50,7 @@ BASELINES = (
     "K/D 1.00 为分界，>=1.15 稳定正贡献，<0.90 偏弱；"
     "ADR 80 左右为较好输出，>=85 稳定高伤，<70 偏低；"
     "RWS 8 为分界，>=10 影响力较强；KAST 70% 为分界；"
+    "首杀成功率 50% 为分界；残局胜率需结合残局次数看；"
     "爆头率 45-55% 属正常区间；胜率 50% 为分界，样本少于 30 场时波动极大"
 )
 
@@ -178,7 +181,7 @@ def build_evidence(
         },
         "dataQuality": {
             "source": (
-                "客户端上报 + 服务端补的 5E 赛季数据（player/home）"
+                "客户端上报的赛季数据（服务端只补齐缺失项）"
                 if season_present
                 else "客户端上报（没有赛季数据，缺失项见 missing）"
             ),

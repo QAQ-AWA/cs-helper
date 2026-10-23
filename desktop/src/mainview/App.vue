@@ -397,6 +397,7 @@ function onBackFromP5e() {
             key="match-assistant"
             class="h-full"
             :ai="ai"
+            :sync="teamSync"
             :comments="comments"
             :matches="matches"
             :watcher="watcher"

@@ -202,6 +202,22 @@ class JobManager:
     def _home_work(self, session: Session) -> None:
         assert self._home_client is not None
         players = session.profiles or adapters.normalise_players(session.report)
+
+        # The desktop uploads its own season sheet. When it is complete the
+        # gateway call is pure duplication, so skip it.
+        already = sum(
+            1
+            for player in players
+            if isinstance(player.get("stats"), dict)
+            and player["stats"].get("seasonAdr") is not None
+        )
+        if players and already >= len(players):
+            session.home_state = "ready"
+            session.home_coverage = already
+            session.home_error = None
+            self.submit_ai(session)
+            return
+
         outcome = self._home_client.fetch(players)
 
         if not outcome.seasons:

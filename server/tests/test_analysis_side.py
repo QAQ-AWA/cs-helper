@@ -102,7 +102,23 @@ def test_self_flag_is_used_when_nothing_is_chosen():
 def test_party_tag_is_the_last_resort():
     report = _report()
     report["teams"]["ct"][2]["partyTag"] = "team-1"
+    report["teams"]["ct"][3]["partyTag"] = "team-1"
     assert resolve_my_side(report) == "ct"
+
+
+def test_a_single_party_tag_is_not_enough():
+    report = _report()
+    report["teams"]["ct"][2]["partyTag"] = "team-1"
+    assert resolve_my_side(report) is None
+
+
+def test_party_tags_on_both_sides_are_ambiguous():
+    report = _report()
+    report["teams"]["ct"][0]["partyTag"] = "1"
+    report["teams"]["ct"][1]["partyTag"] = "1"
+    report["teams"]["t"][0]["partyTag"] = "2"
+    report["teams"]["t"][1]["partyTag"] = "2"
+    assert resolve_my_side(report) is None
 
 
 def test_ambiguous_report_keeps_all_ten():
