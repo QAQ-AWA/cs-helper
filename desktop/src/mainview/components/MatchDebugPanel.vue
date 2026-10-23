@@ -18,7 +18,6 @@ import {
 import type { useP5eCdp } from '../composables/useP5eCdp';
 import type { useComments } from '../composables/useComments';
 import type { MatchHistoryApi } from '../composables/useMatchHistory';
-import type { PerfectAuthStatus } from '@platforms/perfect/auth';
 import { formatAppVersion, useUpdateCheck } from '../composables/useUpdateCheck';
 import { closeAppDevtools, openAppDevtools } from '../utils/devtools';
 import { showToast, useCopyFeedback } from '../composables/useCopyFeedback';
@@ -32,7 +31,6 @@ import {
 } from '../utils/matchHistoryMock';
 import { currentLocale, localize as l, localizeErrorMessage } from '../i18n';
 import { decryptPerfectResponse } from '../native';
-import PerfectApiDebugPanel from './PerfectApiDebugPanel.vue';
 
 const { copyText } = useCopyFeedback();
 const props = withDefaults(
@@ -47,7 +45,6 @@ const props = withDefaults(
     p5e?: ReturnType<typeof useP5eCdp>;
     comments?: ReturnType<typeof useComments>;
     matchHistory?: MatchHistoryApi;
-    perfectAuthStatus?: PerfectAuthStatus;
   }>(),
   {
     placement: 'inline',
@@ -71,7 +68,7 @@ const emit = defineEmits<{
   clearLogs: [];
 }>();
 
-type DebugTab = 'inject' | 'api' | 'decrypt' | 'logs';
+type DebugTab = 'inject' | 'decrypt' | 'logs';
 type InjectSubTab = 'match' | 'p5e' | 'ai' | 'comments' | 'history' | 'update' | 'runtime';
 type LogSubTab = 'perfect' | 'p5e';
 
@@ -531,19 +528,6 @@ watch(
           type="button"
           class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 text-[11px] font-medium transition-colors"
           :class="
-            activeTab === 'api'
-              ? 'border-accent text-fg'
-              : 'border-transparent text-fg-muted hover:text-fg-secondary'
-          "
-          @click="switchTab('api')"
-        >
-          <Database class="h-3.5 w-3.5" />
-          {{ l('完美 API', 'Perfect API') }}
-        </button>
-        <button
-          type="button"
-          class="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 text-[11px] font-medium transition-colors"
-          :class="
             activeTab === 'decrypt'
               ? 'border-accent text-fg'
               : 'border-transparent text-fg-muted hover:text-fg-secondary'
@@ -974,7 +958,6 @@ watch(
         </div>
       </div>
 
-      <PerfectApiDebugPanel v-else-if="activeTab === 'api'" :auth-status="perfectAuthStatus" />
 
       <div v-else-if="activeTab === 'decrypt'" class="space-y-3 p-4">
         <div class="inline-flex rounded-md bg-elevated p-1" role="tablist" :aria-label="l('解密输入方式', 'Decrypt input mode')">

@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import { History, Info, KeyRound, MessageCircle, ScrollText, Settings, Sparkles, Users } from 'lucide-vue-next';
+import { History, Info, MessageCircle, ScrollText, Settings, Sparkles, Users } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { useAiAnalysis } from '../composables/useAiAnalysis';
 import type { useComments } from '../composables/useComments';
 import type { MatchHistoryApi } from '../composables/useMatchHistory';
-import type { PerfectAuthApi } from '../composables/usePerfectAuth';
 import AboutSettingsSection from '../components/settings/AboutSettingsSection.vue';
 import AiSettingsSection from '../components/settings/AiSettingsSection.vue';
 import ChangelogSettingsSection from '../components/settings/ChangelogSettingsSection.vue';
 import CommentHistorySection from '../components/settings/CommentHistorySection.vue';
-import PerfectAccountSettingsSection from '../components/settings/PerfectAccountSettingsSection.vue';
 import TeamSyncSettingsSection from '../components/settings/TeamSyncSettingsSection.vue';
 import SettingsLanguageMenu from '../components/settings/SettingsLanguageMenu.vue';
 import MatchHistoryView from './MatchHistoryView.vue';
 import { useDebugUnlock } from '../composables/useDebugUnlock';
 
-export type SettingsTab = 'history' | 'login-management' | 'sync' | 'ai' | 'comments' | 'changelog' | 'about';
+export type SettingsTab = 'history' | 'sync' | 'ai' | 'comments' | 'changelog' | 'about';
 
 const { t } = useI18n();
 
@@ -24,13 +22,10 @@ const props = defineProps<{
   ai: ReturnType<typeof useAiAnalysis>;
   comments: ReturnType<typeof useComments>;
   history: MatchHistoryApi;
-  perfectAuth: PerfectAuthApi;
-  viewerSteamId?: string;
   initialTab?: SettingsTab;
   visible?: boolean;
 }>();
 
-const emit = defineEmits<{ openPerfectLogin: [method: 'qr' | 'steam'] }>();
 
 const activeTab = ref<SettingsTab>(props.initialTab ?? 'history');
 
@@ -43,7 +38,6 @@ watch(
 
 const navItems = computed(() => [
   { id: 'history' as const, label: t('settings.history'), desc: t('settings.historyDesc'), icon: History },
-  { id: 'login-management' as const, label: t('settings.loginManagement'), desc: t('settings.loginManagementDesc'), icon: KeyRound },
   { id: 'sync' as const, label: '小队协同', desc: '局域网/云端中枢与手机副屏连接设置', icon: Users },
   { id: 'ai' as const, label: t('settings.ai'), desc: t('settings.aiDesc'), icon: Sparkles },
   { id: 'comments' as const, label: t('settings.comments'), desc: t('settings.commentsDesc'), icon: MessageCircle },
@@ -139,13 +133,6 @@ defineExpose({ goBack });
           <Transition name="settings-tab" mode="out-in">
             <div v-if="activeTab === 'ai'" key="ai">
               <AiSettingsSection :ai="ai" :settings-visible="visible ?? true" />
-            </div>
-            <div v-else-if="activeTab === 'login-management'" key="login-management">
-              <PerfectAccountSettingsSection
-                :auth="perfectAuth"
-                :visible="(visible ?? true) && activeTab === 'login-management'"
-                @login="emit('openPerfectLogin', $event)"
-              />
             </div>
             <div v-else-if="activeTab === 'sync'" key="sync">
               <TeamSyncSettingsSection />

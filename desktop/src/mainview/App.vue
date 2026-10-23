@@ -10,16 +10,12 @@ import { useComments } from './composables/useComments';
 import { useLogWatcher } from './composables/useLogWatcher';
 import { useMatchHistory } from './composables/useMatchHistory';
 import { useP5eCdp } from './composables/useP5eCdp';
-import { usePerfectAuth } from './composables/usePerfectAuth';
 import { useCloseConfirm } from './composables/useCloseConfirm';
 import { useTeamSync } from './composables/useTeamSync';
 import { useUpdateCheck } from './composables/useUpdateCheck';
 import MatchAssistantView from './views/MatchAssistantView.vue';
-import PlatformSelectView from './views/PlatformSelectView.vue';
 import SettingsView, { type SettingsTab } from './views/SettingsView.vue';
 import { startupMark } from './utils/startup-metrics';
-import type { PlatformId } from '@platforms/types';
-import type { PerfectAuthMethod } from '@platforms/perfect/auth';
 import { requestMatchAttention } from './native';
 import { localize as l } from './i18n';
 import { buildAiDebugFixture } from '@core/ai/analysis-v2';
@@ -27,7 +23,6 @@ import { buildAiDebugFixture } from '@core/ai/analysis-v2';
 startupMark('app setup start');
 
 const P5eLaunchView = defineAsyncComponent(() => import('./views/P5eLaunchView.vue'));
-const PerfectAuthView = defineAsyncComponent(() => import('./views/PerfectAuthView.vue'));
 const PlayerCommentsDrawer = defineAsyncComponent(
   () => import('./components/comments/PlayerCommentsDrawer.vue'),
 );
@@ -39,42 +34,7 @@ const TeamSyncDialog = defineAsyncComponent(
   () => import('./components/TeamSyncDialog.vue'),
 );
 
-const {
-  phase,
-  selectedPlatform,
-  selectPlatform,
-  completePerfectAuth,
-  completeP5eSetup,
-  resetToPerfectAuth,
-  resetToP5eLaunch,
-  resetToPlatformSelect,
-} = useAppSession();
-const perfectAuth = usePerfectAuth();
-const perfectViewerSteamId = computed(() => (
-  perfectAuth.status.value.phase === 'authenticated' ? perfectAuth.status.value.uid : undefined
-));
-const perfectLoginMethod = ref<PerfectAuthMethod>('qr');
-const PERFECT_AUTH_MIN_DWELL_MS = 1000;
-const PERFECT_AUTH_SUCCESS_HOLD_MS = 420;
-let perfectAuthEnteredAt = 0;
-
-function markPerfectAuthEntry() {
-  perfectAuthEnteredAt = performance.now();
-}
-
-async function waitForPerfectAuthDwell() {
-  const remaining = PERFECT_AUTH_MIN_DWELL_MS - (performance.now() - perfectAuthEnteredAt);
-  if (remaining > 0) {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
-  }
-}
-
-async function waitForPerfectAuthSuccess(authenticatedAt: number) {
-  const remaining = PERFECT_AUTH_SUCCESS_HOLD_MS - (performance.now() - authenticatedAt);
-  if (remaining > 0) {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
-  }
-}
+const { phase, completeP5eSetup, resetToP5eLaunch } = useAppSession();
 
 function flashTaskbarForNewMatch() {
   void requestMatchAttention().catch(() => {
@@ -213,7 +173,7 @@ startupMark('app setup end');
 async function injectAiResult(raw: string): Promise<string | null> {
   const match = matches.value[0];
   if (!match) return l('请先注入或接收一条匹配数据', 'Inject or receive match data first');
-  return ai.injectResult(match, raw, selectedPlatform.value === 'perfect' ? perfectViewerSteamId.value : undefined);
+  return ai.injectResult(match, raw, undefined);
 }
 
 type AppView = 'main' | 'settings';
@@ -240,74 +200,6 @@ function goHome() {
   currentView.value = 'main';
 }
 
-async function onSelectPlatform(id: PlatformId, loginMethod: PerfectAuthMethod = 'qr') {
-  if (id === 'perfect') markPerfectAuthEntry();
-  selectPlatform(id);
-  if (id === 'perfect') {
-    perfectLoginMethod.value = loginMethod;
-    await stopWatching();
-    await perfectAuth.ensureListener();
-  } else {
-    void stopWatching();
-    if (id === '5e') {
-      void p5e.ensureReady();
-    }
-  }
-}
-
-function getAiV3Fixture(): string | null {
-  const match = matches.value[0];
-  return match ? buildAiDebugFixture(match) : null;
-}
-
-async function openPerfectLoginFromSettings(method: PerfectAuthMethod) {
-  currentView.value = 'main';
-  matches.value = [];
-  void p5e.stopCollect();
-  await onSelectPlatform('perfect', method);
-}
-
-let enteringPerfectMain = false;
-watch(
-  () => perfectAuth.status.value.phase,
-  async (authPhase) => {
-    if (selectedPlatform.value !== 'perfect') return;
-    if (authPhase === 'authenticated' && phase.value === 'perfect-auth' && !enteringPerfectMain) {
-      const authenticatedAt = performance.now();
-      enteringPerfectMain = true;
-      try {
-        await ensureListeners();
-        await startWatching();
-        await Promise.all([
-          waitForPerfectAuthDwell(),
-          waitForPerfectAuthSuccess(authenticatedAt),
-        ]);
-        if (
-          selectedPlatform.value !== 'perfect'
-          || phase.value !== 'perfect-auth'
-          || perfectAuth.status.value.phase !== 'authenticated'
-        ) {
-          await stopWatching();
-          return;
-        }
-        completePerfectAuth();
-      } finally {
-        enteringPerfectMain = false;
-      }
-      return;
-    }
-    if (
-      phase.value === 'main'
-      && ['idle', 'expired', 'cancelled', 'error'].includes(authPhase)
-    ) {
-      matches.value = [];
-      await stopWatching();
-      markPerfectAuthEntry();
-      resetToPerfectAuth();
-    }
-  },
-);
-
 async function onDebugOpen() {
   await ensureListeners();
   await p5e.ensureReady();
@@ -317,24 +209,15 @@ function onP5eReady() {
   completeP5eSetup();
 }
 
-async function onBackToPlatformSelect() {
-  const leavingPlatform = selectedPlatform.value;
-  resetToPlatformSelect();
+async function onBackToP5eLaunch() {
+  resetToP5eLaunch();
   matches.value = [];
   await stopWatching();
-  if (leavingPlatform === 'perfect') {
-    perfectAuth.stopValidationTimer();
-    const method = perfectAuth.status.value.method;
-    const qrLive = method === 'qr' && perfectAuth.hasLiveQrSession();
-    if (!qrLive) {
-      await perfectAuth.cancel().catch(() => undefined);
-    }
-  }
   void p5e.stopCollect();
 }
 
 function onBackFromP5e() {
-  void onBackToPlatformSelect();
+  void onBackToP5eLaunch();
 }
 </script>
 
@@ -354,7 +237,6 @@ function onBackFromP5e() {
       :has-update="updateState.hasUpdate"
       :comments="comments"
       :match-history="matchHistory"
-      :perfect-auth-status="perfectAuth.status.value"
       @clear-logs="clearLogEntries"
       @open-settings="openSettings()"
       @open-match-hud="openMatchHudDialog()"
@@ -370,27 +252,13 @@ function onBackFromP5e() {
         :aria-hidden="currentView !== 'main'"
       >
         <Transition name="phase-cross" mode="out-in">
-          <PlatformSelectView
-            v-if="phase === 'select-platform'"
-            key="select-platform"
-            class="h-full"
-            @select="onSelectPlatform"
-          />
           <P5eLaunchView
-            v-else-if="phase === 'p5e-launch'"
+            v-if="phase === 'p5e-launch'"
             key="p5e-launch"
             class="h-full"
             :p5e="p5e"
             @ready="onP5eReady"
             @back="onBackFromP5e"
-          />
-          <PerfectAuthView
-            v-else-if="phase === 'perfect-auth'"
-            key="perfect-auth"
-            class="h-full"
-            :auth="perfectAuth"
-            :initial-method="perfectLoginMethod"
-            @back="onBackToPlatformSelect"
           />
           <MatchAssistantView
             v-else
@@ -401,13 +269,12 @@ function onBackFromP5e() {
             :comments="comments"
             :matches="matches"
             :watcher="watcher"
-            :platform="selectedPlatform ?? 'perfect'"
+            platform="5e"
             :active="currentView === 'main'"
-            :viewer-steam-id="selectedPlatform === 'perfect' ? perfectViewerSteamId : undefined"
             :p5e="p5e"
             :history="matchHistory"
             @open-settings="openSettings('ai')"
-            @back="onBackToPlatformSelect"
+            @back="onBackToP5eLaunch"
           />
         </Transition>
       </div>
@@ -423,11 +290,8 @@ function onBackFromP5e() {
           :ai="ai"
           :comments="comments"
           :history="matchHistory"
-          :perfect-auth="perfectAuth"
-          :viewer-steam-id="perfectViewerSteamId"
           :initial-tab="settingsTab"
           :visible="true"
-          @open-perfect-login="openPerfectLoginFromSettings"
         />
       </div>
     </main>
