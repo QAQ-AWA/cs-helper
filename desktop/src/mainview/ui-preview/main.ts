@@ -12,11 +12,15 @@
  */
 import { createApp, h, ref } from 'vue';
 import '../index.css';
+import MatchWorkspace from '../components/MatchWorkspace.vue';
 import ServerRoomPanel from '../components/ServerRoomPanel.vue';
 
 type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty';
 
-const scenario = (new URLSearchParams(location.search).get('state') ?? 'ready') as Scenario;
+const params = new URLSearchParams(location.search);
+const scenario = (params.get('state') ?? 'ready') as Scenario;
+const view = params.get('view') ?? 'panel';
+const tab = params.get('tab') ?? 'roster';
 
 const PROFILES = [
   { nickname: '半团空气', team: 'ct', stats: { rating: 1.09, seasonAdr: 78, kd: 0.93 } },
@@ -101,7 +105,65 @@ const sync = {
   status: ref('connected'),
 };
 
+function localPlayer(name: string, teamSide: number, rating: number, adr: number, kd: number, hs: number) {
+  return {
+    steamId: `7656119800000000${teamSide}${Math.round(rating * 100)}`,
+    nickname: name,
+    teamSide,
+    isSingle: false,
+    rating,
+    seasonRating: rating,
+    adpr: adr,
+    kd,
+    hsRate: hs,
+    radar: {},
+    recentResults: [],
+    recentRatings: [],
+    tags: [],
+  };
+}
+
+const MATCH_RECORD = {
+  id: 'local-1',
+  platformId: '5e',
+  data: {},
+  summary: { playerCount: 4, mapName: 'de_mirage' },
+  detail: {
+    platformGameId: '2603231600001',
+    mapName: 'de_mirage',
+    readyDeadlineAt: Date.now() + 45_000,
+    teams: [
+      {
+        side: 'A',
+        id: 0,
+        singleCount: 0,
+        partyGroups: [],
+        players: [
+          localPlayer('半团空气', 0, 1.09, 78, 0.93, 0.35),
+          localPlayer('背身步马枪', 0, 1.06, 86, 0.88, 0.41),
+        ],
+      },
+      {
+        side: 'B',
+        id: 1,
+        singleCount: 0,
+        partyGroups: [],
+        players: [
+          localPlayer('Z大爷', 1, 1.08, 106, 1.31, 0.52),
+          localPlayer('Farewell-海海', 1, 1.09, 74, 0.91, 0.38),
+        ],
+      },
+    ],
+    unassigned: [],
+    hasExtraInfo: false,
+    parseWarnings: [],
+  },
+};
+
 createApp({
   // Fixture only: the real composable carries more methods than the panel reads.
-  render: () => h(ServerRoomPanel, { sync: sync as never }),
+  render: () =>
+    view === 'workspace'
+      ? h(MatchWorkspace, { match: MATCH_RECORD as never, sync: sync as never, initialTab: tab as never })
+      : h(ServerRoomPanel, { sync: sync as never }),
 }).mount('#app');

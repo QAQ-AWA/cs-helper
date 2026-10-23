@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MatchHistoryListItem, MatchHistoryViewModel } from '@core/match/history';
 import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue';
-import MatchFeaturedPanel from '../components/MatchFeaturedPanel.vue';
+import MatchWorkspace from '../components/MatchWorkspace.vue';
 import MatchHistoryEmptyState from '../components/match-history/MatchHistoryEmptyState.vue';
 import MatchHistoryListRow from '../components/match-history/MatchHistoryListRow.vue';
 import MatchHistoryListShell, {
@@ -29,9 +29,7 @@ const props = defineProps<{
   visible?: boolean;
 }>();
 
-const emit = defineEmits<{
-  openSettings: [];
-}>();
+
 
 const filter = ref<PlatformFilter>('all');
 const currentPage = ref(1);
@@ -261,14 +259,11 @@ onMounted(() => {
           <div v-else-if="detailError" class="flex h-full items-center justify-center text-[13px] text-rose-600">
             {{ detailError }}
           </div>
-          <MatchFeaturedPanel
+          <MatchWorkspace
             v-else-if="detailVm?.record && detailReady"
             history-mode
             :match="detailVm.record"
-            :ai="detailAi"
-            :comments="comments"
             :initial-post-match="detailVm.postMatch"
-            @open-settings="emit('openSettings')"
             @post-match-updated="onPostMatchUpdated"
           />
         </div>
