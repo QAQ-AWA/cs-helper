@@ -25,6 +25,7 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
   ├─ store.py ── 房间/会话/环形缓冲（内存，重启后从磁盘恢复最近 N 局）
   ├─ persistence.py ── 一局一个 JSON，原子写；历史列表与保留期清理
   ├─ evidence.py ───── 赛前证据包：本地算 direction/reliability/dataQuality
+  ├─ home_enrich.py ── 调 engine 拉 5E 赛季数据（player/home），失败可降级
   ├─ trajectory.py ─── 开局画像：CT 站位、T 下包分布、道具与开局死亡
   ├─ ws.py ────── 每连接有界队列；重连先补事件、快照最后发
   ├─ jobs.py ──── 画像(秒级) → AI(流式) → Demo 任务；按 platform:matchId 全局去重
@@ -33,6 +34,8 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
   └─ devtools.py ─────── DEV=1 时的合成轨迹与本地 .dem 直通解析
 引擎 engine/（纯 Python，CS-Scout 2.0 抽离）
   ├─ job_runner.py ── 5E 链路子进程入口（检索→下载→解析）
+  ├─ home_runner.py ── 赛季数据子进程入口（签名网关 player/home）
+  ├─ home_client.py ── 网关 HMAC 签名 + 赛季字段归一
   ├─ parse_local.py ── 本地 .dem 直通（一次 open 解析多人）
   └─ config/maps/parse/player_json/combat/api_client/pipeline/vpk
 契约 contract/events.json ── 与 server/app/events.py 互为镜像，漂移即测试失败
@@ -102,6 +105,7 @@ CS_HELPER_AI_MODEL=deepseek-flash  # 可用模型仅 deepseek-flash / deepseek-v
 CS_HELPER_DEV=1                    # 开 /api/v1/dev/*（seed-paths / parse-local）
 CS_HELPER_LOCAL_DEMO_DIR=...       # dev 解析允许读取 .dem 的目录
 CS_HELPER_DEMO_MAX_DEMOS=1         # 每人 demo 数，调大线性增加下载时间
+CS_HELPER_HOME=0                   # 关闭 5E 赛季数据补全（player/home 签名网关）
 
 # 运维（P5）
 CS_HELPER_DATA_DIR=...             # 历史根目录，默认 .cache/data
@@ -111,8 +115,8 @@ CS_HELPER_HISTORY_DAYS=7           # 历史保留天数，到期连轨迹一起�
 CS_HELPER_SESSION_MEMORY_MAX=50    # 内存里最多常驻多少局
 
 # 测试
-cd server && pytest tests -q    # 114
-cd engine && pytest tests -q    # 104 passed, 10 skipped（需 328MB 集成 demo）
+cd server && pytest tests -q    # 120
+cd engine && pytest tests -q    # 111 passed, 10 skipped（需 328MB 集成 demo）
 cd desktop && npx vitest run    # 284
 ```
 
@@ -152,17 +156,27 @@ cd desktop && npx vitest run    # 284
 
 ## 功能深化（本轮）
 
-### 0. 数据到底从哪来（回答"为什么不搬 home-api"）
+### 0. 数据到底从哪来
 
 | 数据 | 来源 | 谁在抓 |
 | --- | --- | --- |
 | 选手赛季数据（Rating/K/D/爆头率/胜率/场次） | 桌面端已打开的 5E 比赛详情接口（`field-mapper.ts` 的 `userData` / `seasonBlock`），随上报带给服务端 | 桌面端 |
+| **赛季 ADR/RWS/KAST（补充）** | **服务端自己调 5E 签名网关 `player/home`**（`engine/home_client.py`） | 服务端 |
 | demo 列表与下载地址 | 5E **公开**接口：`arena/api/search` + `gate` 分页（`engine/api_client.py`） | 引擎 |
 | 轨迹、下包点、道具、死亡 | 自己的 `demoparser2` 解析 | 引擎 |
 
-旧项目 `home-api.ts` 走的是签名网关（HMAC，Rust `gate_sign`），能多拿赛季 ADR/RWS/KAST。没搬的原因：**密钥会随 5E 客户端更新失效**（旧项目自己就写了 `formatP5eHomeEnrichError` 专门提示"签名验证失败"），而它补的是锦上添花字段；证据包已经把缺的指标写进 `dataQuality.missing`，模型不会瞎编。
+签名网关已经搬过来了（从 `desktop/src-tauri/src/platform/platform_5e_gate_sign.rs` 移植到 Python）：
 
-**副作用要记住**：签名失效时桌面端退回本场 `fight` 数据，`matchesPlayed` 会报 0。`evidence.reliability_for()` 因此把 `<=0` 判成 `unknown` 而不是 `low`——"不知道"和"打得少"是两件事。
+- **算法**：阿里云网关 HMAC-SHA256。canonical = `METHOD\n*/*\n\n\n\n<accept-language:zh-cn\nauthorization:>\n<path?query>`，query 按 key 升序，签名 base64 放 `x-ca-signature`。
+- **正确性**：Rust 侧有单元测试向量（uuid `ed954be0-…` → `V+81D/A51CzX6Azk0HbElYwxZfLiquWykkaT6k+Z8Io=`），Python 实现逐字节对齐，`engine/tests/test_home_client.py` 锁住它。
+- **UUID**：`home_client.resolve_uuids()` 用一份 match detail 解析整队（详情里有十个玩家），不是一人一次请求。
+- **单位**：5E 的 `kast` / `per_headshot` / `per_win_match` 是 0-1 小数，`parse_season()` 统一乘 100，与客户端上报的百分数量纲一致。
+- **失效处理**：401/403 抛 `GateSignatureError` → `homeState=signature` + `ROOM_ERROR 2007 (stage=home)` + 手机端阵容卡一行黄字；**不阻塞**画像、轨迹和 AI。
+- **开关**：`CS_HELPER_HOME=0` 关闭。`create_app(home_client=None)` 默认关（测试不许联网），`app.main:app` 显式开。
+
+已知维护点：密钥硬编码在 5E 前端产物里（与桌面端同源），5E 改版就会失效——所以这条链路的所有失败都必须是可降级的。
+
+**副作用要记住**：桌面端签名失效时 `matchesPlayed` 会报 0。`evidence.reliability_for()` 因此把 `<=0` 判成 `unknown` 而不是 `low`——"不知道"和"打得少"是两件事。
 
 ### 1. 我方阵营：只下对面 5 人
 
@@ -210,12 +224,13 @@ cd desktop && npx vitest run    # 284
 
 ## 未做 / 待验证
 
-- **开局预判未接真实模型**：本轮环境没有 `CS_HELPER_AI_KEY`，只验证了提示词结构与真实画像数据，`tacticsState` 落在 `skipped`。接上 key 后应能看到 400 字左右的四段输出。
-- **`mySide` 桌面端未上报**：桌面端目前既没有 `isSelf` 也没有 `partyTag`，所以只能靠手机端手动选；后续可在桌面端读本机 SteamID 自动填。
+- **签名网关的长期有效性**：密钥硬编码在 5E 前端产物里，5E 改版即失效。已做可降级 + 提示，但**没有自动发现新密钥**的能力，失效后需要人工从 5E 前端产物里重新提取并改 `engine/home_client.py`。
+- **开局预判未接真实模型**：本轮环境没有 `CS_HELPER_AI_KEY`，只验证了提示词结构与真实画像数据，`tacticsState` 落在 `skipped`。
+- **`mySide` 桌面端未上报**：桌面端既没有 `isSelf` 也没有 `partyTag`，靠手机端手动选或 ID 库自动判。
 - **包点映射只验证了 mirage**：326/327 的 A/B 约定按 CS2 实体顺序推断，其他图若出现反向需在 `parse.BOMBSITE_LABELS` 按图覆盖。
 - **历史习惯聚合**：现在是单场轨迹回放 + 单场开局画像；跨场聚合（同一对手多场叠加）还没做。
 - 真机视觉：手机渲染逻辑有无头断言保证不崩，但配色/缩放/手感未做真机走查。
-- 桌面端 AI 面板未订阅 `phase:"thinking"`，也没订阅新的 `AI_TACTICS_*`。
+- 桌面端 AI 面板未订阅 `phase:"thinking"`，也没订阅 `AI_TACTICS_*`。
 - 328MB 集成 demo 缺失，engine 有 10 个用例 skip。
 
 ## 建议下一步

@@ -166,8 +166,15 @@ function handle(action, payload) {
       if (typeof payload.report === 'string') showTactics(payload.report);
       break;
     case 'ROOM_ERROR':
-      setConn('warn', payload.message || '服务端异常');
-      $('demo-status').textContent = payload.message || '';
+      if (payload.stage === 'home') {
+        // Signature failure is expected; keep it in the roster card instead of
+        // hijacking the connection indicator.
+        $('season-source').classList.add('warn');
+        $('season-source').textContent = payload.message || '赛季数据拉取失败';
+      } else {
+        setConn('warn', payload.message || '服务端异常');
+        $('demo-status').textContent = payload.message || '';
+      }
       break;
   }
 }
@@ -235,9 +242,32 @@ function renderMatch(match, profile) {
   $('team-t').innerHTML =
     players.filter((p) => p.team === 't').map(playerRow).join('') || '<div class="muted">—</div>';
   renderSidePick(match.mySide || '', match.mySideSource || '');
+  renderSeason(match);
   if (profile) {
     state.profilePlayers = players;
     $('profile-source').textContent = '数据来自队友电脑端上报';
+  }
+}
+
+/** 5E season data is best-effort; a rotated signature is stated, not hidden. */
+function renderSeason(match) {
+  const box = $('season-source');
+  const state = match.homeState || '';
+  box.classList.toggle('warn', state === 'signature' || state === 'failed');
+  if (state === 'signature') {
+    box.textContent = match.homeError || '5E 签名失效，赛季数据这次没拿到';
+  } else if (state === 'failed') {
+    box.textContent = match.homeError || '赛季数据拉取失败，仅用本场数据';
+  } else if (state === 'partial') {
+    box.textContent = `赛季数据补全 ${match.homeCoverage || 0} 人，其余用本场数据`;
+  } else if (state === 'ready') {
+    box.textContent = `赛季数据已补全（${match.homeCoverage || 0} 人）`;
+  } else if (state === 'skipped') {
+    box.textContent = '';
+  } else if (state === 'running') {
+    box.textContent = '正在拉取 5E 赛季数据…';
+  } else {
+    box.textContent = '';
   }
 }
 

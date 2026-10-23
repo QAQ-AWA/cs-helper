@@ -49,7 +49,16 @@ def test_low_sample_players_are_flagged_for_the_model():
 def test_missing_metrics_are_declared_instead_of_invented():
     pack = build_evidence("de_dust2", [_player("Alpha", "ct"), _player("Bravo", "t")])
     assert pack["dataQuality"]["available"] is None or pack["dataQuality"]["available"] == []
-    assert set(pack["dataQuality"]["missing"]) == {"Rating", "K/D", "爆头率", "胜率"}
+    # Season-only metrics appear here until player/home enrichment fills them.
+    assert set(pack["dataQuality"]["missing"]) == {
+        "Rating",
+        "K/D",
+        "ADR",
+        "RWS",
+        "KAST",
+        "爆头率",
+        "胜率",
+    }
     assert pack["players"][0]["metrics"]["rating"]["direction"] == "unknown"
 
 

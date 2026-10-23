@@ -89,6 +89,10 @@ class Session:
     profiles: list[dict[str, Any]] | None = None
     demo_state: str = "pending"  # pending | running | ready | skipped | failed
     artifact_id: str | None = None
+    # 5E season enrichment (player/home). "signature" means the key rotated.
+    home_state: str = "pending"  # pending | running | ready | partial | skipped | failed | signature
+    home_error: str | None = None
+    home_coverage: int = 0
     ai_state: str = "pending"  # pending | running | ready | skipped | failed
     ai_text: str | None = None
     # Second AI pass: opening habits read off the parsed trajectories.
@@ -113,6 +117,9 @@ class Session:
             "mySide": self.report.get("mySide"),
             "profileState": self.profile_state,
             "demoState": self.demo_state,
+            "homeState": self.home_state,
+            "homeError": self.home_error,
+            "homeCoverage": self.home_coverage,
             "artifactId": self.artifact_id,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
@@ -139,6 +146,9 @@ class Session:
             "profiles": self.profiles,
             "demoState": self.demo_state,
             "artifactId": self.artifact_id,
+            "homeState": self.home_state,
+            "homeError": self.home_error,
+            "homeCoverage": self.home_coverage,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
             "tacticsState": self.tactics_state,
@@ -165,6 +175,9 @@ class Session:
                 profiles=data.get("profiles"),
                 demo_state=str(data.get("demoState") or "pending"),
                 artifact_id=(str(data["artifactId"]) if data.get("artifactId") else None),
+                home_state=str(data.get("homeState") or "pending"),
+                home_error=data.get("homeError"),
+                home_coverage=int(data.get("homeCoverage") or 0),
                 ai_state=str(data.get("aiState") or "pending"),
                 ai_text=data.get("aiText"),
                 tactics_state=str(data.get("tacticsState") or "pending"),
@@ -177,7 +190,7 @@ class Session:
         if not isinstance(session.report, dict) or not session.report.get("teams"):
             return None
         # A job that was mid-flight when the process died will never finish.
-        for attribute in ("profile_state", "demo_state", "ai_state", "tactics_state"):
+        for attribute in ("profile_state", "demo_state", "ai_state", "tactics_state", "home_state"):
             if getattr(session, attribute) == "running":
                 setattr(session, attribute, "failed")
         return session
@@ -197,6 +210,7 @@ class Session:
             "updatedAt": int(self.updated_at * 1000),
             "profileState": self.profile_state,
             "demoState": self.demo_state,
+            "homeState": self.home_state,
             "aiState": self.ai_state,
             "tacticsState": self.tactics_state,
             "hasArtifact": bool(self.artifact_id),

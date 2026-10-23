@@ -30,10 +30,14 @@ MAP_FIT_HINTS: dict[str, str] = {
 }
 
 # Metrics the client can actually supply, with the tolerance below which a
-# difference is noise rather than signal.
+# difference is noise rather than signal. The season* keys only exist after the
+# player/home enrichment, so their absence is reported rather than assumed.
 METRIC_SPECS: dict[str, dict[str, Any]] = {
     "rating": {"label": "Rating", "tolerance": 0.03, "digits": 2},
     "kd": {"label": "K/D", "tolerance": 0.03, "digits": 2},
+    "seasonAdr": {"label": "ADR", "tolerance": 3.0, "digits": 1},
+    "seasonRws": {"label": "RWS", "tolerance": 0.5, "digits": 1},
+    "seasonKast": {"label": "KAST", "tolerance": 1.5, "digits": 1},
     "headshotRate": {"label": "爆头率", "tolerance": 2.0, "digits": 1},
     "winRate": {"label": "胜率", "tolerance": 2.0, "digits": 1},
 }
@@ -42,8 +46,9 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
 BASELINES = (
     "Rating 1.00 为分界，>=1.10 偏强，<0.95 偏弱；"
     "K/D 1.00 为分界，>=1.15 稳定正贡献，<0.90 偏弱；"
-    "爆头率 45-55% 属正常区间；"
-    "胜率 50% 为分界，样本少于 30 场时波动极大"
+    "ADR 80 左右为较好输出，>=85 稳定高伤，<70 偏低；"
+    "RWS 8 为分界，>=10 影响力较强；KAST 70% 为分界；"
+    "爆头率 45-55% 属正常区间；胜率 50% 为分界，样本少于 30 场时波动极大"
 )
 
 RELIABILITY_BANDS = ((30, "high"), (10, "medium"), (0, "low"))
@@ -161,6 +166,7 @@ def build_evidence(
 
     missing = [spec["label"] for key, spec in METRIC_SPECS.items() if lobby[key] is None]
     low_sample = [row["name"] for row in rows if row["reliability"] in {"low", "unknown"}]
+    season_present = any(row["metrics"]["seasonAdr"]["value"] is not None for row in rows)
 
     return {
         "match": {
@@ -171,7 +177,11 @@ def build_evidence(
             "perspective": "我方/对方" if my_side else "未指定，按 CT/T 表述",
         },
         "dataQuality": {
-            "source": "队友电脑端读取的平台公开赛季数据（非 demo 解析）",
+            "source": (
+                "客户端上报 + 服务端补的 5E 赛季数据（player/home）"
+                if season_present
+                else "客户端上报（没有赛季数据，缺失项见 missing）"
+            ),
             "available": [spec["label"] for key, spec in METRIC_SPECS.items() if lobby[key] is not None],
             "missing": missing or None,
             "lowSamplePlayers": low_sample or None,

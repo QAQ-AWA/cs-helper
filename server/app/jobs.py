@@ -25,6 +25,7 @@ from .ai import TACTICS_SYSTEM_PROMPT, build_prompt, build_tactics_prompt
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
 from .events import Action
+from .home_enrich import HomeClient, merge_season_stats
 from .store import Session
 from .trajectory import build_profile
 
@@ -59,6 +60,7 @@ class JobManager:
         max_workers: int = 4,
         on_change: Callable[[Session], None] | None = None,
         side_resolver: Callable[[Session], str | None] | None = None,
+        home_client: HomeClient | None = None,
     ) -> None:
         self._emit_session = emit_session
         self._artifacts = artifacts
@@ -66,6 +68,7 @@ class JobManager:
         self._ai_client = ai_client
         self._on_change = on_change
         self._side_resolver = side_resolver
+        self._home_client = home_client
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job")
         self._futures: set[Future] = set()
         self._lock = Lock()
@@ -182,7 +185,58 @@ class JobManager:
         session.profiles = payload["players"]
         session.profile_state = "ready"
         self._emit_session(session, Action.PROFILE_READY, payload)
-        # AI 依赖画像，所以串在画像之后，而不是等客户端再触发一次。
+        # Season data enriches the same rows, so it runs before the AI pass.
+        self.submit_home(session)
+
+    # -- 5E season enrichment ------------------------------------------
+    def submit_home(self, session: Session) -> Future | None:
+        if self._home_client is None:
+            if session.home_state == "pending":
+                session.home_state = "skipped"
+            return self.submit_ai(session)
+        if session.home_state in {"running", "ready", "partial", "signature"}:
+            return self.submit_ai(session)
+        session.home_state = "running"
+        return self.submit("home", session, self._home_work)
+
+    def _home_work(self, session: Session) -> None:
+        assert self._home_client is not None
+        players = session.profiles or adapters.normalise_players(session.report)
+        outcome = self._home_client.fetch(players)
+
+        if not outcome.seasons:
+            # A rotated key is an expected state, not a crash: say so once and
+            # keep the rest of the pipeline running on client-reported stats.
+            session.home_state = "signature" if outcome.signature_failed else "failed"
+            session.home_error = outcome.error or "player/home 没有返回任何赛季数据"
+            self._emit_session(
+                session,
+                Action.ROOM_ERROR,
+                {
+                    "code": 2007 if outcome.signature_failed else 2008,
+                    "message": session.home_error,
+                    "retryable": False,
+                    "stage": "home",
+                },
+            )
+            self.submit_ai(session)
+            return
+
+        merged = merge_season_stats(players, outcome.seasons)
+        session.profiles = players
+        session.home_coverage = merged
+        session.home_state = "ready" if merged >= len(players) else "partial"
+        session.home_error = outcome.error
+        self._emit_session(
+            session,
+            Action.PROFILE_READY,
+            {
+                "sessionId": session.id,
+                "source": "client+season",
+                "mapName": session.map_name,
+                "players": players,
+            },
+        )
         self.submit_ai(session)
 
     # -- ai ------------------------------------------------------------

@@ -40,6 +40,7 @@ class RoomHub:
         repository: SessionRepository | None = None,
         history_days: int | None = None,
         identity: IdentityStore | None = None,
+        home_client: object | None = None,
     ) -> None:
         self.store = store
         self.tokens = tokens
@@ -56,6 +57,7 @@ class RoomHub:
             ai_client,
             on_change=self.persist,
             side_resolver=self.resolved_side,
+            home_client=home_client,  # type: ignore[arg-type]
         )
         self.room_mode = room_mode or settings.ROOM_MODE
         self.single_room_code = single_room_code or settings.SINGLE_ROOM_CODE

@@ -58,6 +58,13 @@ AI_THINKING = (os.getenv("CS_HELPER_AI_THINKING", "0") or "0").strip() not in {"
 # 开发模式：开放 /api/v1/dev/*（合成轨迹），生产环境保持关闭。
 DEV_MODE = (os.getenv("CS_HELPER_DEV") or "").strip().lower() in {"1", "true", "yes", "on"}
 
+# 5E 赛季数据（player/home）。签名密钥会随 5E 前端更新失效，失效时只提示不阻塞。
+HOME_ENABLED = (os.getenv("CS_HELPER_HOME", "1") or "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
+
 # -- 运维（P5）------------------------------------------------------------
 # 房间多久没被访问就回收。客户端每次进房/拉快照都会续期，所以 4 小时足够。
 ROOM_TTL = _int_env("CS_HELPER_ROOM_TTL", 4 * 60 * 60, 60, 7 * 24 * 3600)

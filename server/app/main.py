@@ -30,6 +30,7 @@ from .ai import OpenAiClient, config_from_settings
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner, SubprocessDemoRunner
 from .events import Action
+from .home_enrich import SubprocessHomeClient
 from .hub import RoomHub, RoomNotFound
 from .identity import IdentityStore
 from .models import (
@@ -73,6 +74,9 @@ def create_app(
     artifacts: ArtifactStore | None = None,
     room_mode: str | None = None,
     ai_client: object | None | str = "auto",
+    # Off unless asked, exactly like persistence: tests and embedders must not
+    # hit 5E just by creating an app.
+    home_client: object | None | str = None,
     persist_dir: str | Path | None = None,
     gc_interval: float | None = None,
     history_days: int | None = None,
@@ -102,6 +106,8 @@ def create_app(
     if ai_client == "auto":
         ai_config = config_from_settings()
         ai_client = OpenAiClient(ai_config) if ai_config else None
+    if home_client == "auto":
+        home_client = SubprocessHomeClient() if settings.HOME_ENABLED else None
     # The ID library lives beside the history so a restart does not forget who
     # "we" are; without persistence it degrades to in-memory.
     identity = IdentityStore(
@@ -118,6 +124,7 @@ def create_app(
         repository=repository,
         history_days=history_days,
         identity=identity,
+        home_client=home_client,
     )
     limiter = JoinLimiter()
     if repository is not None:
@@ -552,4 +559,5 @@ app = create_app(
     gc_interval=settings.GC_INTERVAL or None,
     history_days=settings.HISTORY_DAYS,
     session_memory_max=settings.SESSION_MEMORY_MAX,
+    home_client="auto",
 )
