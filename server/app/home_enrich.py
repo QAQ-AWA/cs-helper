@@ -131,6 +131,8 @@ def merge_season_stats(profiles: list[dict[str, Any]], seasons: dict[str, dict[s
             stats = {}
             player["stats"] = stats
 
+        # 先记住客户端报上来的赛季 Rating：下面会用它判断「近期」是不是复制品。
+        client_season_rating = stats.get("seasonRating")
         mapping = {
             "seasonAdr": season.get("adr"),
             "seasonRws": season.get("rws"),
@@ -148,7 +150,7 @@ def merge_season_stats(profiles: list[dict[str, Any]], seasons: dict[str, dict[s
         # 客户端在拿不到场均时会用本图生涯 Rating 顶上，结果和 seasonRating 一模一样；
         # 服务端拿到真正的场均时要把这个假值换掉，否则两列永远重复。
         duplicate = (
-            stats.get("rating") == stats.get("seasonRating")
+            stats.get("rating") == client_season_rating
             and season.get("avgRating") not in (None, season.get("rating"))
         )
         if (stats.get("rating") in (None, 0, 1) or duplicate) and season.get("avgRating"):

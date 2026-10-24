@@ -236,3 +236,17 @@ def test_a_genuinely_different_client_rating_is_kept():
 
     # 客户端报的是独立来源（近几场），不该被赛季场均盖掉。
     assert profiles[0]["stats"]["rating"] == 1.20
+
+
+def test_duplicate_detection_uses_the_clients_own_season_rating():
+    """客户端报的 1.14 是它自己的赛季值，服务端把它更新成 1.15 之后
+    仍然要认出「近期」那一列是复制品，否则两列还是一样。"""
+
+    from app.home_enrich import merge_season_stats
+
+    profiles = [{"platformUserId": "p1", "stats": {"rating": 1.14, "seasonRating": 1.14}}]
+    merge_season_stats(profiles, {"p1": {"rating": 1.15, "avgRating": 1.087}})
+
+    stats = profiles[0]["stats"]
+    assert stats["seasonRating"] == 1.15
+    assert stats["rating"] == 1.087
