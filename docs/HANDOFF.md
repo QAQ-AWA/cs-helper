@@ -460,6 +460,36 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 五个对手五场会被压成一场（40 个下包回合只算 20）。引擎现在给每个回合盖
 `match_code`，服务端按 `(match_code, round_id)` 去重。
 
+## 分析页与阵容页（2026-10-24 恢复旧 UI）
+
+旧客户端 AI 那套界面（胜率条 / 决定因素 / 玩家信号 / 双方取胜路径）在重写面板时
+删掉了，用户更习惯那套呈现。现在按「UI 回来、算力留在服务端」恢复：
+
+| 层 | 现在的做法 |
+| --- | --- |
+| 服务端 | 分析输出 v3 结构化 JSON，`app/analysis_result.py` 负责解析与兜底 |
+| 手机 | `ai_text` 由结构化结果本地渲染成 Markdown，不额外调模型 |
+| 桌面 | `AiAnalysisPanel` 渲染结构化结果；老会话退回 Markdown 面板 |
+| 阵容 | `TeamPlayerTable` 按队伍列 10 人，可排序，行上带 AI 信号底色 |
+
+### 为什么解析要兜底
+
+模型偶尔把 JSON 包在解释文字或代码块里，字段也可能缺。`parse_analysis_result`
+会剥代码块、从首个 `{` 到最后一个 `}` 截取、夹紧概率到 100、纠偏枚举、
+截断超长文案，并丢弃不在名单里的 `playerSignals`（编造的玩家卡片比没有更糟）。
+仍然解析不出来时给一次「只输出 JSON」的修复调用，再失败才报错。
+
+### 重新分析
+
+`POST /api/v1/room/{code}/analysis/rerun` 只重跑 AI，不动轨迹下载。
+面板上的「重新分析」按钮走这个接口。
+
+### 雷达图跨源
+
+桌面端页面来自 `tauri://localhost`，雷达图是跨源图片。`replay-core.js` 先按
+`crossOrigin=anonymous` 取，失败再退回普通加载：前者让 canvas 不被标记 tainted
+（能读像素），后者保证反向代理吞掉 CORS 头时雷达图至少还能显示。
+
 ## 真实对局测试清单（首次验收）
 
 前置：**必须用 `7d1aded` 及之后的构建**（`a853bd9` 之前的 exe 没有服务端分析面板与同步设置）。
