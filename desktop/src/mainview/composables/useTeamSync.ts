@@ -30,8 +30,12 @@ export interface ServerMatchView {
 }
 
 export interface ServerPlayerView {
+  steamId?: string;
   nickname?: string;
   team?: string;
+  avatarUrl?: string;
+  partyTag?: string | null;
+  isSelf?: boolean;
   stats?: Record<string, number | string | boolean | undefined> | null;
 }
 
