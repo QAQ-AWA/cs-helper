@@ -92,7 +92,9 @@ const sides = computed(() =>
       side: token,
       players: (raw?.players ?? []).map(withServerStats),
     };
-    return { ...side, token, team };
+    // 还没确定我方是谁时，别把 CT 写成「我方」——那是猜的。
+    const title = props.mySide ? `${side.label} · ${token === 'A' ? '我方' : '对方'}` : side.label;
+    return { ...side, token, title, team };
   }),
 );
 
@@ -108,7 +110,7 @@ function signalsFor(token: 'A' | 'B'): AiPlayerSignal[] {
       :key="side.key"
       :team="side.team"
       :columns="columns"
-      :title="`${side.label} · ${side.token === 'A' ? '我方' : '对方'}`"
+      :title="side.title"
       :side-token="side.token"
       :player-signals="signalsFor(side.token)"
       :current-map="mapName"

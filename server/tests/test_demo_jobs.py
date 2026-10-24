@@ -58,10 +58,10 @@ def _room(client):
     return client.post("/api/v1/room/create", json={}).json()["data"]
 
 
-def _report(client, room):
+def _report(client, room, **overrides):
     return client.post(
         f"/api/v1/match/report?roomCode={room['roomCode']}",
-        json=make_report(),
+        json=make_report(**overrides),
         headers={"Authorization": f"Bearer {room['token']}"},
     )
 
@@ -291,3 +291,21 @@ def test_artifact_index_falls_back_to_roster_nickname(monkeypatch, tmp_path):
     player = bundle["players"][0]
     assert player["username"] is None
     assert player["nickname"] == "Alpha"
+
+
+def test_demo_reruns_when_the_map_becomes_known(demo_client, monkeypatch):
+    """5E 先报 de_unknown、后补真地图：轨迹不能永远停在 skipped。"""
+    client, runner = demo_client
+    monkeypatch.setattr(
+        app_settings, "maps_ready", lambda name: name not in {"", "de_unknown"}
+    )
+
+    room = _room(client)
+    _report(client, room, mapName="de_unknown")
+    _wait(client, room, lambda match: match.get("demoState") == "skipped")
+    assert runner.calls == []
+
+    _report(client, room, mapName="de_mirage")
+    _wait(client, room, lambda match: match.get("demoState") == "ready")
+    assert len(runner.calls) == 1
+    assert runner.calls[0][0].map_name == "de_mirage"

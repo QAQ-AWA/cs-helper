@@ -7,6 +7,7 @@ import type { useTeamSync } from '../composables/useTeamSync';
 import { useMatchCountdown } from '../composables/useMatchCountdown';
 import AiAnalysisPanel from './AiAnalysisPanel.vue';
 import RosterBoard from './RosterBoard.vue';
+import SidePickerDialog from './SidePickerDialog.vue';
 import ServerAnalysisPanel from './ServerAnalysisPanel.vue';
 import TacticalPathsPanel from './TacticalPathsPanel.vue';
 import PostMatchBoard from './PostMatchBoard.vue';
@@ -71,6 +72,29 @@ const aiStatus = computed<'pending' | 'running' | 'ready' | 'failed' | 'skipped'
 });
 
 const aiError = computed(() => props.sync?.aiError.value ?? null);
+
+/** 服务端认不出我方是谁时，先问一次，别替用户猜。 */
+const sideDismissed = ref(false);
+const showSidePicker = computed(
+  () => Boolean(hasAnalysis.value && !mySide.value && !props.historyMode && !sideDismissed.value),
+);
+const sideBusy = computed(() => Boolean(props.sync?.sideBusy.value));
+const sideTeams = computed(() => {
+  const teams = props.match.detail.teams ?? [];
+  const names = (index: number) =>
+    (teams[index]?.players ?? []).map((player) => player.nickname || '').filter(Boolean);
+  return { ct: names(0), t: names(1) };
+});
+
+function pickSide(side: 'ct' | 't') {
+  sideDismissed.value = true;
+  void props.sync?.setAnalysisSide(side);
+}
+
+function analyzeAllSides() {
+  sideDismissed.value = true;
+  void props.sync?.setAnalysisSide(null);
+}
 /** 老会话只有 Markdown，没有结构化结果。 */
 const aiText = computed(() => props.sync?.serverMatch.value?.aiText ?? '');
 const postReport = computed(
@@ -89,7 +113,16 @@ const postReport = computed(
       </div>
 
       <div class="mt-1 flex items-center gap-2 text-[11px] text-fg-muted">
-        <span v-if="sideLabel">{{ sideLabel }}</span>
+        <button
+          v-if="sideLabel && !historyMode"
+          type="button"
+          class="cursor-pointer rounded px-1 -mx-1 transition-colors hover:bg-elevated hover:text-fg"
+          :title="'切换我方阵营'"
+          @click="sideDismissed = false"
+        >
+          {{ sideLabel }} · 改
+        </button>
+        <span v-else-if="sideLabel">{{ sideLabel }}</span>
         <span v-if="roomCode">房间 {{ roomCode }}</span>
         <span v-if="!sync" class="text-fg-muted">历史回放</span>
         <span
@@ -160,4 +193,13 @@ const postReport = computed(
       />
     </div>
   </div>
+
+  <SidePickerDialog
+    :open="showSidePicker"
+    :busy="sideBusy"
+    :teams="sideTeams"
+    @pick="pickSide"
+    @analyze-all="analyzeAllSides"
+    @close="sideDismissed = true"
+  />
 </template>

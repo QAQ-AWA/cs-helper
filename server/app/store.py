@@ -432,6 +432,16 @@ class Store:
             key = self._session_ids.get(session_id)
             return self._sessions.get(key) if key else None
 
+    def get_session_by_key(self, key: str) -> Session | None:
+        """Look a session up by ``platform:matchId``.
+
+        A second room reporting the same match has no ``session_id`` bound yet,
+        so looking it up by id alone would treat it as a brand-new match.
+        """
+
+        with self._lock:
+            return self._sessions.get(key)
+
     def sessions(self) -> list[Session]:
         """Newest first, for the history endpoint when nothing is on disk."""
 

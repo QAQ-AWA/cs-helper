@@ -310,3 +310,29 @@ def test_tactics_pass_runs_after_the_trajectory_is_ready(tmp_path, monkeypatch):
     assert "开局预判" in ai.systems[1]
     assert '"planted"' in ai.prompts[1]
     assert '"siteKnown":["A"]' in ai.prompts[1]
+
+
+def test_switching_side_reruns_the_analysis(monkeypatch, tmp_path):
+    """换边等于换视角：旧结论是按另一边写的，必须重算。"""
+
+    from app import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path / "data")
+    ai = FakeAi()
+    app = create_app(secret="test-secret", demo_runner=None, room_mode="single", ai_client=ai)
+    with TestClient(app) as client:
+        host = client.post("/api/v1/room/create", json={"creatorNickname": "房主"}).json()["data"]
+        headers = {"Authorization": f"Bearer {host['token']}"}
+        client.post("/api/v1/match/report?roomCode=MAIN", json=make_report(), headers=headers)
+
+        deadline = time.time() + 5
+        while time.time() < deadline and len(ai.systems) < 1:
+            time.sleep(0.02)
+        assert len(ai.systems) == 1
+
+        client.post("/api/v1/room/MAIN/analysis-side", json={"mySide": "t", "all": False}, headers=headers)
+
+        deadline = time.time() + 5
+        while time.time() < deadline and len(ai.systems) < 2:
+            time.sleep(0.02)
+        assert len(ai.systems) == 2

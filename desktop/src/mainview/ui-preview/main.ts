@@ -20,7 +20,7 @@ import AboutSettingsSection from '../components/settings/AboutSettingsSection.vu
 import MatchHistoryListRow from '../components/match-history/MatchHistoryListRow.vue';
 import StoredAiReport from '../components/StoredAiReport.vue';
 
-type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty';
+type Scenario = 'ready' | 'no-ai' | 'signature' | 'empty' | 'no-side';
 
 const params = new URLSearchParams(location.search);
 const scenario = (params.get('state') ?? 'ready') as Scenario;
@@ -181,6 +181,10 @@ function makeMatch(state: Scenario) {
     tacticsState: 'ready',
     updatedAt: Date.now(),
   };
+  if (state === 'no-side') {
+    // 服务端认不出我方是谁：客户端应该先弹窗问，而不是替用户猜。
+    return { ...base, mySide: null, mySideSource: null, aiText: AI_TEXT, aiResult: AI_RESULT };
+  }
   if (state === 'no-ai') {
     return { ...base, aiState: 'skipped', aiText: null, tacticsState: 'skipped', tacticsText: null };
   }

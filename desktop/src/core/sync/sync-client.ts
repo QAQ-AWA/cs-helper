@@ -12,7 +12,9 @@ export class TeamSyncClient {
   private status: SyncStatus = 'disconnected';
   private listeners = new Set<SyncEventListener>();
   private reconnectTimer: number | null = null;
-  private lastReportedMatchId: string | null = null;
+  // 同一局要能重报：地图常常是「先未知、后补上」，阵容也可能在准备阶段补齐。
+  // 只按 matchId 去重会把后到的正确数据丢掉（实测 dust2 那局一直卡在 de_unknown）。
+  private lastReported: { key: string; fingerprint: string } | null = null;
   private readonly reportedPostMatches = new Set<string>();
   /** Last event sequence applied, used to resume after a dropped socket. */
   private lastSeq = 0;
@@ -111,7 +113,7 @@ export class TeamSyncClient {
   }
 
   private resetMatchTracking(): void {
-    this.lastReportedMatchId = null;
+    this.lastReported = null;
     this.lastSeq = 0;
   }
 
@@ -192,7 +194,15 @@ export class TeamSyncClient {
 
     const built = buildMatchReport(record);
     if (!built) return; // no usable roster yet, or an incomplete Perfect snapshot
-    if (built.idempotencyKey === this.lastReportedMatchId) return;
+    const fingerprint = [
+      built.body.mapName,
+      built.body.teams.ct.map((player) => player.steamId).join(','),
+      built.body.teams.t.map((player) => player.steamId).join(','),
+      built.body.mySide ?? '',
+    ].join('|');
+    if (this.lastReported?.key === built.idempotencyKey && this.lastReported.fingerprint === fingerprint) {
+      return;
+    }
 
     const serverUrl = this.settings.serverUrl.replace(/\/+$/, '');
 
@@ -214,7 +224,7 @@ export class TeamSyncClient {
 
       const json = await res.json().catch(() => null);
       if (res.ok && json?.code === 0) {
-        this.lastReportedMatchId = built.idempotencyKey;
+        this.lastReported = { key: built.idempotencyKey, fingerprint };
         this.emit('matchReported', json.data);
         return;
       }

@@ -190,6 +190,11 @@ class RoomHub:
     # -- match ---------------------------------------------------------
     def report_match(self, room: Room, report: dict[str, Any]) -> tuple[Session, bool]:
         existing = self.store.get_session(room.session_id) if room.session_id else None
+        if existing is None:
+            # 另一个房间报了同一局：房间里还没绑定会话，但会话本身已经存在。
+            existing = self.store.get_session_by_key(
+                f"{report.get('platform')}:{report.get('matchId')}"
+            )
         if (
             existing is not None
             and existing.match_id == report.get("matchId")
@@ -199,8 +204,14 @@ class RoomHub:
             # A second PC re-reporting the same match must not wipe the side
             # someone already picked; that would silently re-download all ten.
             report = {**report, "mySide": existing.report["mySide"]}
+        previous_map = existing.map_name if existing is not None else None
         session, created = self.store.upsert_session(report, room_code=room.code)
         self.store.bind(room, session)
+        # 地图常常是「先 de_unknown、后补上」：第一次上报时 demo 会被跳过，
+        # 等真地图到了必须重跑，否则轨迹永远不出来。
+        if not created and session.map_name != previous_map:
+            session.demo_state = "pending"
+            session.tactics_state = "pending"
         self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         self.persist(session)
         self.jobs.submit_profile(session)
@@ -228,6 +239,11 @@ class RoomHub:
                 self.learn_identity(room, my_side)
             except RoomNotFound:
                 pass
+            # A/B 换了边，旧的分析是按错的敌我写的，必须重算而不是留着。
+            if session.ai_state != "running":
+                session.ai_state = "pending"
+                session.ai_result = None
+                session.ai_text = None
         self.persist(session)
         self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         if self.jobs.demo_enabled:
@@ -235,6 +251,10 @@ class RoomHub:
                 self.jobs.cancel(session.id)
             session.demo_state = "pending"
             self.jobs.submit_demo(session)
+        # 换边等于换视角：旧分析是按另一边写的，必须重算。
+        if session.ai_state != "running":
+            session.ai_state = "pending"
+            self.jobs.submit_ai(session)
         return session
 
     def rerun_analysis(self, room: Room) -> Session:
