@@ -62,7 +62,7 @@ def test_match_survives_restart(tmp_path):
 
     second = _app(tmp_path)
     with TestClient(second) as client:
-        phone = client.post("/api/v1/room/join", json={"nickname": "手机"}).json()["data"]
+        phone = client.post("/api/v1/room/join", json={"roomCode": "MAIN", "nickname": "手机"}).json()["data"]
         snapshot = client.get("/api/v1/room/MAIN/snapshot", headers=_headers(phone["token"])).json()["data"]
 
     match = snapshot["match"]
@@ -85,7 +85,7 @@ def test_replay_artifact_survives_restart(tmp_path, monkeypatch):
 
     second = _app(tmp_path)
     with TestClient(second) as client:
-        phone = client.post("/api/v1/room/join", json={"nickname": "手机"}).json()["data"]
+        phone = client.post("/api/v1/room/join", json={"roomCode": "MAIN", "nickname": "手机"}).json()["data"]
         headers = _headers(phone["token"])
         snapshot = client.get("/api/v1/room/MAIN/snapshot", headers=headers).json()["data"]
         assert snapshot["match"]["artifactId"] == artifact_id

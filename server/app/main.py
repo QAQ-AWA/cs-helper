@@ -260,6 +260,10 @@ def create_app(
         client = request.client.host if request.client else "unknown"
         if not limiter.allow(client):
             raise ApiError("尝试过于频繁，请稍后再试", code=1004, status=429)
+        # 单房间模式下房间码就是唯一的门禁：服务端放到公网后，不能谁报个码都放进来。
+        # 码只在二维码链接里，等于一个 6 位共享口令。
+        if hub.is_single_room and payload.roomCode.strip().upper() != hub.single_room_code:
+            raise ApiError("房间码不正确", code=1002, status=403)
         if not hub.is_single_room and len(payload.roomCode.strip()) < 4:
             raise ApiError("房间码无效", code=1002, status=400)
         try:

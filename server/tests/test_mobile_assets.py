@@ -43,9 +43,11 @@ def test_pwa_entry_points(client):
     assert "manifest" in manifest.headers["content-type"]
     assert manifest.json()["start_url"] == "/"
 
+    # Service Worker 已经退化成 kill switch：只负责注销自己并清缓存，
+    # 否则手机上永远看到旧外壳（「只有无痕窗口能看到数据」就是这么来的）。
     worker = client.get("/sw.js")
     assert worker.status_code == 200
-    assert "/api/" in worker.text  # live data must bypass the cache
+    assert "unregister" in worker.text
 
 
 def test_map_assets_are_served_but_sandboxed(client, monkeypatch, tmp_path):
