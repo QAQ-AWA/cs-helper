@@ -172,6 +172,26 @@ def create_app(
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def _shell_no_cache(request: Request, call_next):
+        """页面外壳绝不能被缓存。
+
+        网页端跑在手机上，浏览器（以及旧版 Service Worker）会把 HTML/JS 缓存很久，
+        结果就是「改了没生效、只有无痕窗口能看到新数据」。静态外壳一律 no-store，
+        数据接口本来就走 /api，不受影响。
+        """
+
+        response = await call_next(request)
+        path = request.url.path
+        if (
+            path == "/"
+            or path.startswith("/static/")
+            or path in {"/sw.js", "/manifest.webmanifest"}
+        ):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     # -- error envelope -------------------------------------------------
     @app.exception_handler(ApiError)
     async def _api_error(_request: Request, exc: ApiError):

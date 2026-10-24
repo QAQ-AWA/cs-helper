@@ -360,16 +360,21 @@ class JobManager:
         evidence = build_evidence(session.map_name, players, side)
         allowed = structured_allowed_players(evidence, side)
 
+        quality = evidence.get("dataQuality") or {}
+        have = len(quality.get("available") or [])
+        lack = len(quality.get("missing") or [])
+        coverage = have / (have + lack) if (have + lack) else None
+
         raw = self._stream_ai(
             session,
             build_structured_prompt(evidence, side),
             STRUCTURED_SYSTEM_PROMPT,
         )
-        result = parse_analysis_result(raw, allowed_players=allowed)
+        result = parse_analysis_result(raw, allowed_players=allowed, data_coverage=coverage)
         if result is None and raw.strip():
             # 模型偶尔会把 JSON 包在解释文字里，给一次纯格式修复的机会。
             raw = self._stream_ai(session, build_repair_prompt(raw), STRUCTURED_SYSTEM_PROMPT)
-            result = parse_analysis_result(raw, allowed_players=allowed)
+            result = parse_analysis_result(raw, allowed_players=allowed, data_coverage=coverage)
 
         if result is None:
             session.ai_state = "failed"

@@ -112,6 +112,7 @@ def parse_analysis_result(
     raw: str,
     *,
     allowed_players: dict[str, tuple[str, str]] | None = None,
+    data_coverage: float | None = None,
 ) -> dict[str, Any] | None:
     """Turn the model's JSON into the exact shape the UI expects.
 
@@ -216,7 +217,10 @@ def parse_analysis_result(
         headline = f"{leader} 队更被看好（{model_probability['A']:.0f}% 对 {model_probability['B']:.0f}%）"
 
     confidence = _number(payload.get("confidence"), 50.0) or 0.0
-    coverage = _number(payload.get("dataCoverage"), 0.0) or 0.0
+    # 模型经常不写覆盖率；用证据包里「拿到的指标 / 应有指标」算出来更靠谱。
+    coverage = _number(payload.get("dataCoverage"), None)
+    if coverage is None:
+        coverage = data_coverage or 0.0
     if coverage > 1:
         coverage = coverage / 100
 

@@ -1,51 +1,29 @@
-const CACHE = 'cs-helper-shell-v2';
-const SHELL = [
-  '/',
-  '/static/mobile.css',
-  '/static/mobile.js',
-  '/static/replay-core.js',
-  '/static/icon.svg',
-  '/manifest.webmanifest',
-];
+/* 已废弃的 Service Worker —— 只负责把自己注销掉。
+ *
+ * 网页端跑在手机上，靠局域网访问电脑，不需要离线能力；而旧版 SW 会把页面外壳
+ * 缓存住，表现就是「改了没生效，只有无痕窗口能看到新数据」。
+ * 这里保留文件是为了让还装着旧 SW 的设备能通过更新检查拿到这个版本，
+ * 装上后立刻注销自己并清空缓存。
+ */
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting()),
-  );
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim()),
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  if (url.origin !== location.origin) return;
-  // Live data must never be served from cache.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) return;
-  if (event.request.method !== 'GET') return;
-
-  // Network first: the shell is served from a LAN box that changes on every
-  // release, and a cache-first shell means the phone keeps running last week's
-  // JS until the second reload. Cache is only the offline fallback.
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => cached || Response.error())),
+    (async () => {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      } catch (_) {
+        /* ignore */
+      }
+      try {
+        await self.registration.unregister();
+      } catch (_) {
+        /* ignore */
+      }
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => client.navigate(client.url).catch(() => {}));
+    })(),
   );
 });
