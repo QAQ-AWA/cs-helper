@@ -90,9 +90,9 @@ flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
 - 直链：<https://github.com/QAQ-AWA/cs-helper-exe/releases/download/latest-build/cs-match-helper.exe>
 - 打 `v*` tag 会生成正式 Release
 
-> 构建在 `cs-test` 上跑，安装包发布到 `cs-helper-exe`（客户端「检查更新」指向这里）。
-> 跨仓库发布需要在该仓库的 Actions secrets 里配置 `RELEASE_TOKEN`（对 `cs-helper-exe`
-> 有 `contents: write` 的 PAT）。
+> 构建和发布都在 `cs-helper-exe` 里跑，用仓库自带的 `GITHUB_TOKEN` 即可，不需要额外配置。
+> `cs-test` 是同一份代码的镜像，那边的构建只产出 artifact、不发 Release，
+> 免得两个仓库各有一份 `latest-build`。
 
 工作流在 `.github/workflows/build-desktop.yml`：单元测试 → 前端构建 → `tauri build --no-bundle` → 上传产物。
 

@@ -74,23 +74,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # 桌面端的安装包统一发布到 cs-helper-exe（客户端「检查更新」就指向那个仓库）。
-      # 跨仓库发布不能复用默认的 GITHUB_TOKEN，需要 RELEASE_TOKEN 这个 PAT。
-      - name: Check release token
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        run: |
-          if (-not "${{ secrets.RELEASE_TOKEN }}") {
-            throw "缺少 RELEASE_TOKEN：发布到 QAQ-AWA/cs-helper-exe 需要一个对该仓库有 contents:write 的 PAT（Settings → Secrets → Actions 里添加）"
-          }
-
-      # 每次 main 构建都更新同一个预发布，方便直接下载最新包
+      # 安装包统一发到 cs-helper-exe（客户端「检查更新」指向那个仓库）。
+      # 代码两边都有、构建也在 cs-helper-exe 里跑，所以用默认 GITHUB_TOKEN 就能发布，
+      # 不需要 PAT。cs-test 上只产出 artifact，避免两个仓库各有一份 latest-build
+      # 让人不知道该下哪个。
       - name: Publish rolling prerelease
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: >-
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request' &&
+          github.repository == 'QAQ-AWA/cs-helper-exe'
         uses: softprops/action-gh-release@v2
         with:
-          repository: QAQ-AWA/cs-helper-exe
-          token: ${{ secrets.RELEASE_TOKEN }}
           tag_name: latest-build
           name: Latest build
           body: |
@@ -101,10 +95,8 @@ jobs:
           files: desktop/src-tauri/target/release/cs-match-helper.exe
 
       - name: Publish tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'QAQ-AWA/cs-helper-exe'
         uses: softprops/action-gh-release@v2
         with:
-          repository: QAQ-AWA/cs-helper-exe
-          token: ${{ secrets.RELEASE_TOKEN }}
           files: desktop/src-tauri/target/release/cs-match-helper.exe
           generate_release_notes: true
