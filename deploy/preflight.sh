@@ -28,14 +28,29 @@ else
 fi
 
 echo "== 依赖轮子（ARM64 是否有预编译包）=="
-for spec in "demoparser2==0.41.4" "pandas==3.0.3" "numpy==2.4.6"; do
-  if "$PY" -m pip download --only-binary=:all: --no-deps -d /tmp/cs-preflight "$spec" >/tmp/cs-preflight.log 2>&1; then
-    ok "$spec 有 $(ls /tmp/cs-preflight | grep -c "$(echo "$spec" | cut -d= -f1)") 个可用包"
-  else
-    bad "$spec 拿不到预编译包（看 /tmp/cs-preflight.log）"
+# Ubuntu 24.04 的系统 python 默认没有 pip（externally-managed），
+# 没有就临时建个 venv 来查，别因为这个误判成「没有 ARM 轮子」。
+PIP_PY="$PY"
+if ! "$PY" -m pip --version >/dev/null 2>&1; then
+  if [ ! -x /tmp/cs-preflight-venv/bin/python ]; then
+    "$PY" -m venv /tmp/cs-preflight-venv >/dev/null 2>&1 || {
+      bad "没有 pip 也建不了 venv：先 apt install python3-venv python3-pip"
+      PIP_PY=""
+    }
   fi
-done
-rm -rf /tmp/cs-preflight /tmp/cs-preflight.log
+  [ -x /tmp/cs-preflight-venv/bin/python ] && PIP_PY=/tmp/cs-preflight-venv/bin/python
+fi
+if [ -n "$PIP_PY" ]; then
+  for spec in "demoparser2==0.41.4" "pandas==3.0.3" "numpy==2.4.6"; do
+    if "$PIP_PY" -m pip download --only-binary=:all: --no-deps -d /tmp/cs-preflight "$spec" >/tmp/cs-preflight.log 2>&1; then
+      wheel=$(ls /tmp/cs-preflight | grep "^$(echo "$spec" | cut -d= -f1)" | head -1)
+      ok "$spec → $wheel"
+    else
+      bad "$spec 拿不到预编译包（tail /tmp/cs-preflight.log）"
+    fi
+  done
+fi
+rm -rf /tmp/cs-preflight /tmp/cs-preflight.log /tmp/cs-preflight-venv
 
 echo "== 5E 接口 =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 https://api.5eplay.com/ 2>/dev/null)
@@ -46,10 +61,11 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 https://gate.5eplay.com/ 2>/
 echo "== demo CDN 速度（真正决定轨迹出得快不快）=="
 # 只取前 8MB，测速后丢弃；5E 的 demo 是 200-400MB 一个。
 url="https://cd-t-demo.5eplaycdn.com/pug/20261017/g161-20261017061226220457717_de_dust2.zip"
-speed=$(curl -s -o /dev/null -m 20 -r 0-8388607 -w '%{speed_download}' "$url" 2>/dev/null || echo 0)
+# 单连接可能被 CDN 限速，取 24MB 两段并测，接近真实下载体验
+speed=$(curl -s -o /dev/null -m 30 -r 0-25165823 -w '%{speed_download}' "$url" 2>/dev/null || echo 0)
 mbps=$(awk -v s="${speed:-0}" 'BEGIN{printf "%.1f", s*8/1000000}')
 if [ "${speed%.*}" -gt 2000000 ] 2>/dev/null; then
-  ok "约 ${mbps} Mbps（8MB 测速）—— 一个 300MB demo 约 $(awk -v s="$speed" 'BEGIN{printf "%.0f", 300*1024*1024/s}') 秒"
+  ok "约 ${mbps} Mbps（24MB 测速）—— 一个 300MB demo 约 $(awk -v s="$speed" 'BEGIN{printf "%.0f", 300*1024*1024/s}') 秒"
 elif [ "${speed%.*}" -gt 500000 ] 2>/dev/null; then
   warn "约 ${mbps} Mbps —— 偏慢，5 个对手可能要等几分钟"
 else
