@@ -75,6 +75,7 @@ const aiStatus = computed<'pending' | 'running' | 'ready' | 'failed' | 'skipped'
 
 const aiError = computed(() => props.sync?.aiError.value ?? null);
 const aiWait = computed(() => props.sync?.serverMatch.value?.aiWait ?? null);
+const pathReport = computed(() => props.sync?.serverMatch.value?.pathReport ?? null);
 
 /** 服务端认不出我方是谁时，先问一次，别替用户猜。 */
 const sideDismissed = ref(false);
@@ -187,7 +188,7 @@ const postReport = computed(
       >
         这一局没有留下 AI 分析
       </div>
-      <TacticalPathsPanel v-else-if="activeTab === 'paths'" />
+      <TacticalPathsPanel v-else-if="activeTab === 'paths'" :report="pathReport" />
       <PostMatchBoard
         v-else
         :match="match"

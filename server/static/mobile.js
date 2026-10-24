@@ -256,6 +256,13 @@ function handle(action, payload) {
     case 'AI_TACTICS_CHUNK':
       renderTacticsProgress(payload);
       break;
+    case 'PATHS_REPORT_READY':
+      if (payload.report) {
+        state.match = { ...(state.match || {}), pathReport: payload.report };
+        renderPathReport();
+        markTab('paths');
+      }
+      break;
     case 'AI_TACTICS_READY':
       applyMatch({ ...(state.match || {}), tacticsState: 'ready', tacticsText: payload.report });
       break;
@@ -744,9 +751,53 @@ async function rememberSide() {
 
 /* ---------- 轨迹 ---------- */
 
+/** 轨迹页顶部的 AI 走位解读：每个人怎么走、大概率在哪、怎么针对。 */
+function renderPathReport() {
+  const box = $('path-report');
+  const report = state.match?.pathReport;
+  if (!box) return;
+  if (!report) {
+    box.innerHTML = '';
+    return;
+  }
+  const players = (report.players || [])
+    .map(
+      (item) => `<article class="signal">
+        <span class="bar"></span>
+        <div class="body">
+          <div class="who">
+            <span>${escapeHtml(item.nickname)}</span>
+            ${item.side ? `<span class="side ${item.side === 'CT' ? 'a' : 'b'}">${escapeHtml(item.side)}</span>` : ''}
+          </div>
+          ${item.habit ? `<p class="why">${escapeHtml(item.habit)}</p>` : ''}
+          ${item.likely ? `<p class="why"><span class="muted">大概率：</span>${escapeHtml(item.likely)}</p>` : ''}
+          ${item.counter ? `<p class="why" style="color:var(--accent)"><span class="muted">针对：</span>${escapeHtml(item.counter)}</p>` : ''}
+        </div>
+      </article>`,
+    )
+    .join('');
+  const counters = (report.counters || []).length
+    ? `<div class="uncertain" style="background:var(--accent-soft);border-color:#c7d2fe">
+         <h4 style="color:var(--accent)">整队对策</h4>
+         <ul>${report.counters.map((line) => `<li style="color:var(--fg-secondary)">${escapeHtml(line)}</li>`).join('')}</ul>
+       </div>`
+    : '';
+  box.innerHTML = `<div class="card">
+    <div class="hero-top">
+      <span class="verdict">开局走位解读</span>
+      ${report.tempo ? `<span class="pill">${escapeHtml(report.tempo)}</span>` : ''}
+      ${report.sitePreference ? `<span class="pill">${escapeHtml(report.sitePreference)}</span>` : ''}
+    </div>
+    ${report.summary ? `<h2 style="font-size:15px;margin:10px 0 0">${escapeHtml(report.summary)}</h2>` : ''}
+    <div class="signal-group" style="margin-top:12px">${players}</div>
+    ${counters ? `<div style="margin-top:12px">${counters}</div>` : ''}
+  </div>`;
+}
+
 function renderPaths(payload) {
   state.paths = payload;
   state.artifactId = payload.artifactId;
+  renderPathReport();
   const players = payload.players || [];
   const box = $('paths-list');
   $('demo-status').textContent = players.length

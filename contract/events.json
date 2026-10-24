@@ -9,17 +9,124 @@
     "payload": "object"
   },
   "events": [
-    { "action": "ROOM_STATE_SYNC", "direction": "server->client", "payload": ["members", "match", "latestSeq"] },
-    { "action": "ROOM_MEMBERS_CHANGED", "direction": "server->client", "payload": ["members"] },
-    { "action": "MATCH_DETECTED", "direction": "server->client", "payload": ["sessionId", "platform", "matchId", "mapName", "teams", "countdownSeconds", "phase"] },
-    { "action": "PROFILE_READY", "direction": "server->client", "payload": ["sessionId", "players", "source"] },
-    { "action": "JOB_PROGRESS", "direction": "server->client", "payload": ["jobId", "stage", "done", "total", "etaSec"] },
-    { "action": "TACTICAL_PATHS_READY", "direction": "server->client", "payload": ["sessionId", "artifactId", "players"] },
-    { "action": "AI_STREAM_CHUNK", "direction": "server->client", "payload": ["sessionId", "accumulated"] },
-    { "action": "AI_REPORT_READY", "direction": "server->client", "payload": ["sessionId", "report"] },
-    { "action": "AI_TACTICS_CHUNK", "direction": "server->client", "payload": ["sessionId", "accumulated"] },
-    { "action": "AI_TACTICS_READY", "direction": "server->client", "payload": ["sessionId", "report"] },
-    { "action": "POST_MATCH_READY", "direction": "server->client", "payload": ["sessionId", "score", "halfScores", "players"] },
-    { "action": "ROOM_ERROR", "direction": "server->client", "payload": ["code", "message", "retryable", "stage"] }
+    {
+      "action": "ROOM_STATE_SYNC",
+      "direction": "server->client",
+      "payload": [
+        "members",
+        "match",
+        "latestSeq"
+      ]
+    },
+    {
+      "action": "ROOM_MEMBERS_CHANGED",
+      "direction": "server->client",
+      "payload": [
+        "members"
+      ]
+    },
+    {
+      "action": "MATCH_DETECTED",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "platform",
+        "matchId",
+        "mapName",
+        "teams",
+        "countdownSeconds",
+        "phase"
+      ]
+    },
+    {
+      "action": "PROFILE_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "players",
+        "source"
+      ]
+    },
+    {
+      "action": "JOB_PROGRESS",
+      "direction": "server->client",
+      "payload": [
+        "jobId",
+        "stage",
+        "done",
+        "total",
+        "etaSec"
+      ]
+    },
+    {
+      "action": "TACTICAL_PATHS_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "artifactId",
+        "players"
+      ]
+    },
+    {
+      "action": "AI_STREAM_CHUNK",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "accumulated"
+      ]
+    },
+    {
+      "action": "AI_REPORT_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "report"
+      ]
+    },
+    {
+      "action": "AI_TACTICS_CHUNK",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "accumulated"
+      ]
+    },
+    {
+      "action": "AI_TACTICS_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "report"
+      ]
+    },
+    {
+      "action": "PATHS_REPORT_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "report",
+        "model"
+      ]
+    },
+    {
+      "action": "POST_MATCH_READY",
+      "direction": "server->client",
+      "payload": [
+        "sessionId",
+        "score",
+        "halfScores",
+        "players"
+      ]
+    },
+    {
+      "action": "ROOM_ERROR",
+      "direction": "server->client",
+      "payload": [
+        "code",
+        "message",
+        "retryable",
+        "stage"
+      ]
+    }
   ]
 }

@@ -31,6 +31,9 @@ from .ai import (
 )
 from .analysis_result import parse_analysis_result, render_markdown
 from .readiness import analysis_key, map_ready, missing_for_analysis, missing_for_demo
+from .path_report import build_prompt as build_path_prompt
+from .path_report import parse_report as parse_path_report
+from .path_report import SYSTEM_PROMPT as PATH_SYSTEM_PROMPT
 from .evidence import build_evidence
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
@@ -679,4 +682,37 @@ class JobManager:
             session,
             Action.AI_TACTICS_READY,
             {"sessionId": session.id, "report": accumulated, "model": settings.AI_MODEL},
+        )
+        # 同一份证据再问一次，但这次只要结构化的「每个人怎么走、怎么针对」，
+        # 给轨迹页顶部那张卡用。失败不影响已经出来的开局预判。
+        self._path_report_work(session)
+
+    def _path_report_work(self, session: Session) -> None:
+        if self._ai_client is None or not session.trajectory:
+            return
+        allowed: dict[str, tuple[str, str]] = {}
+        for side in ("ct", "t"):
+            for player in (session.report.get("teams") or {}).get(side) or []:
+                name = player.get("nickname")
+                if name:
+                    allowed[str(name)] = (str(player.get("steamId") or ""), side.upper())
+
+        try:
+            raw = self._stream_ai(
+                session,
+                build_path_prompt(session.trajectory, session.report.get("mySide")),
+                PATH_SYSTEM_PROMPT,
+            )
+            report = parse_path_report(raw, allowed_players=allowed)
+        except Exception:
+            log.exception("path report failed for %s", session.id)
+            return
+        if not report:
+            return
+        session.path_report = report
+        self.persist(session)
+        self._emit_session(
+            session,
+            Action.PATHS_REPORT_READY,
+            {"sessionId": session.id, "report": report, "model": settings.AI_MODEL},
         )

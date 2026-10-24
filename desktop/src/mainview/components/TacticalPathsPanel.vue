@@ -5,6 +5,25 @@ import { teamSyncClient } from '@core/sync/sync-client';
 import { ReplayPlayer } from '@shared/replay-core.js';
 import { resolveRadarUrl } from '../utils/resolve-radar-url';
 
+interface PathReportPlayer {
+  nickname: string;
+  steamId?: string;
+  side?: string;
+  habit?: string;
+  likely?: string;
+  counter?: string;
+}
+
+interface PathReport {
+  summary?: string;
+  tempo?: string;
+  sitePreference?: string;
+  players?: PathReportPlayer[];
+  counters?: string[];
+}
+
+const props = defineProps<{ report?: PathReport | null }>();
+
 interface PathPlayer {
   steamId: string;
   username?: string;
@@ -181,8 +200,58 @@ onBeforeUnmount(() => {
     </aside>
 
     <section class="flex min-w-0 flex-1 flex-col">
-      <div v-if="!activeSteam" class="grid min-h-0 flex-1 place-items-center rounded bg-elevated text-xs text-fg-muted">
-        选择左侧选手查看开局习惯轨迹
+      <div
+        v-if="!activeSteam"
+        class="min-h-0 flex-1 overflow-y-auto rounded border border-border bg-surface p-4"
+      >
+        <template v-if="props.report">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
+              开局走位解读
+            </span>
+            <span v-if="props.report.tempo" class="text-[11px] text-fg-secondary">
+              {{ props.report.tempo }}
+            </span>
+            <span v-if="props.report.sitePreference" class="text-[11px] text-fg-secondary">
+              {{ props.report.sitePreference }}
+            </span>
+          </div>
+          <p class="mt-2 text-sm font-semibold leading-relaxed text-fg">{{ props.report.summary }}</p>
+
+          <div class="mt-3 space-y-2">
+            <article
+              v-for="item in props.report.players"
+              :key="item.nickname"
+              class="rounded-lg border border-border bg-elevated/40 px-3 py-2"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-[13px] font-semibold text-fg">{{ item.nickname }}</span>
+                <span v-if="item.side" class="rounded bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-fg-secondary">
+                  {{ item.side }}
+                </span>
+              </div>
+              <p v-if="item.habit" class="mt-1 text-[12px] leading-relaxed text-fg-secondary">{{ item.habit }}</p>
+              <p v-if="item.likely" class="mt-1 text-[12px] leading-relaxed text-fg-secondary">
+                <span class="text-fg-muted">大概率：</span>{{ item.likely }}
+              </p>
+              <p v-if="item.counter" class="mt-1 text-[12px] leading-relaxed text-accent">
+                <span class="text-fg-muted">针对：</span>{{ item.counter }}
+              </p>
+            </article>
+          </div>
+
+          <div v-if="props.report.counters?.length" class="mt-3 rounded-lg bg-accent-soft/60 px-3 py-2">
+            <p class="text-[11px] font-semibold text-accent">整队对策</p>
+            <ul class="mt-1 list-disc space-y-0.5 pl-4">
+              <li v-for="line in props.report.counters" :key="line" class="text-[12px] text-fg-secondary">
+                {{ line }}
+              </li>
+            </ul>
+          </div>
+        </template>
+        <div v-else class="grid h-full place-items-center text-xs text-fg-muted">
+          选择左侧选手查看开局习惯轨迹；AI 走位解读会在解析完成后自动生成
+        </div>
       </div>
       <template v-else>
         <div class="mb-2 flex flex-wrap items-center gap-1.5">

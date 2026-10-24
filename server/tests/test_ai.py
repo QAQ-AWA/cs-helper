@@ -305,8 +305,9 @@ def test_tactics_pass_runs_after_the_trajectory_is_ready(tmp_path, monkeypatch):
             time.sleep(0.02)
 
     assert state == "ready"
-    # Two calls: the season-stats read, then the trajectory read.
-    assert len(ai.systems) == 2
+    # 三次调用：实力分析 → 开局预判 → 走位解读（结构化，给轨迹页那张卡）
+    assert len(ai.systems) == 3
+    assert "走位" in ai.prompts[2] or "开局轨迹" in ai.prompts[2]
     assert "开局预判" in ai.systems[1]
     assert '"planted"' in ai.prompts[1]
     assert '"siteKnown":["A"]' in ai.prompts[1]

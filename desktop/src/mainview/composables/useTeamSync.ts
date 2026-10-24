@@ -24,11 +24,30 @@ export interface ServerMatchView {
   aiResult?: AiAnalysisResultV3 | null;
   /** 还差什么才能开算（例如「等地图确认」）。 */
   aiWait?: string[] | null;
+  /** 对手开局走位解读（轨迹页顶部那张卡）。 */
+  pathReport?: PathReportView | null;
   tacticsState?: string;
   tacticsText?: string | null;
   postReport?: P5ePostMatchReport | null;
   createdAt?: number;
   updatedAt?: number;
+}
+
+export interface PathReportPlayerView {
+  nickname: string;
+  steamId?: string;
+  side?: string;
+  habit?: string;
+  likely?: string;
+  counter?: string;
+}
+
+export interface PathReportView {
+  summary?: string;
+  tempo?: string;
+  sitePreference?: string;
+  players?: PathReportPlayerView[];
+  counters?: string[];
 }
 
 export interface ServerPlayerView {
@@ -136,6 +155,11 @@ export function useTeamSync() {
         const payload = data as { accumulated?: string };
         if (payload?.accumulated) {
           tacticsStream.value = payload.accumulated;
+        }
+      } else if (event === 'PATHS_REPORT_READY') {
+        const payload = data as { report?: PathReportView };
+        if (payload?.report) {
+          mergeMatch({ pathReport: payload.report });
         }
       } else if (event === 'AI_TACTICS_READY') {
         const payload = data as { report?: string };

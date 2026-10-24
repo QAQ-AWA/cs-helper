@@ -99,6 +99,8 @@ class Session:
     ai_result: dict[str, Any] | None = None
     # 这份分析是基于什么输入算出来的（地图 + 名单 + 敌我）。变了就得重算。
     analysis_key: str | None = None
+    # 对手开局走位的结构化解读（轨迹页顶部那张卡）。
+    path_report: dict[str, Any] | None = None
     # 还差什么才能开跑，给界面显示「等地图确认」这种话。
     ai_wait: list[str] | None = None
     # Second AI pass: opening habits read off the parsed trajectories.
@@ -130,6 +132,7 @@ class Session:
             "aiState": self.ai_state,
             "aiText": self.ai_text,
             "aiResult": self.ai_result,
+            "pathReport": self.path_report,
             "aiWait": self.ai_wait,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
@@ -161,6 +164,7 @@ class Session:
             "aiText": self.ai_text,
             "aiResult": self.ai_result,
             "analysisKey": self.analysis_key,
+            "pathReport": self.path_report,
             "aiWait": self.ai_wait,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
@@ -193,6 +197,7 @@ class Session:
                 ai_text=data.get("aiText"),
                 ai_result=data.get("aiResult"),
                 analysis_key=data.get("analysisKey"),
+                path_report=data.get("pathReport"),
                 ai_wait=data.get("aiWait"),
                 tactics_state=str(data.get("tacticsState") or "pending"),
                 tactics_text=data.get("tacticsText"),
