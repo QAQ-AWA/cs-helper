@@ -14,6 +14,8 @@ from .engine_runner import DemoRunner
 from .events import Action
 from .identity import IdentityStore
 from .adapters import resolve_side
+from .readiness import map_ready
+from .readiness import map_ready
 from .readiness import analysis_key
 from .jobs import JobManager
 from .persistence import SessionRepository
@@ -355,7 +357,13 @@ class RoomHub:
         """One housekeeping pass: expired rooms, idle sessions, old history."""
 
         rooms, sessions = self.store.purge_expired()
-        result = {"rooms": len(rooms), "sessions": len(sessions), "history": 0, "artifacts": 0}
+        result = {
+            "rooms": len(rooms),
+            "sessions": len(sessions),
+            "history": 0,
+            "artifacts": 0,
+            "abandoned": self.abandon_stale_unmapped(),
+        }
         if self.repository is not None:
             window = self.history_days * 86400
             dropped = self.repository.prune(window)
@@ -376,6 +384,38 @@ class RoomHub:
                 result["artifacts"],
             )
         return result
+
+    def abandon_stale_unmapped(self) -> int:
+        """地图一直没确认的对局：5E 上多半根本没开成，别让轨迹页一直转圈。
+
+        实测：准备阶段取消的对局，`get_match_detail` 直接回 500，永远等不到地图。
+        标成 skipped 之后界面会显示「跳过」；如果地图后来真的到了，
+        `report_match` 发现 mapName 变了会把 demo/tactics 重新置为 pending 再跑。
+        """
+
+        deadline = time.time() - settings.STALE_MAP_SECONDS
+        changed = 0
+        for session in self.store.sessions():
+            if map_ready(session.map_name):
+                continue
+            if session.created_at > deadline:
+                continue
+            if session.demo_state in {"skipped", "failed", "ready", "running"}:
+                continue
+            session.demo_state = "skipped"
+            if session.tactics_state in {"pending", "waiting", "running"}:
+                session.tactics_state = "skipped"
+            session.updated_at = time.time()
+            self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
+            self.persist(session)
+            changed += 1
+            log.info(
+                "abandoned unmapped session %s (%s) after %ds",
+                session.id,
+                session.match_id,
+                settings.STALE_MAP_SECONDS,
+            )
+        return changed
 
     def metrics(self) -> dict[str, Any]:
         stats: dict[str, Any] = dict(self.store.stats())

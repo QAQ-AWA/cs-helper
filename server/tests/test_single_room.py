@@ -124,3 +124,95 @@ def test_report_requires_the_key_when_configured(monkeypatch):
             assert ok.json()["data"]["matchId"] == "g161-key-test"
     finally:
         app_settings.REPORT_KEY = ""
+
+
+def test_unmapped_session_is_abandoned_after_the_timeout(monkeypatch):
+    """准备阶段取消的对局永远等不到地图，别让轨迹页一直转圈。"""
+
+    from app import hub as hub_mod, settings as app_settings
+
+    monkeypatch.setattr(app_settings, "STALE_MAP_SECONDS", 60)
+    app = create_app(secret="test-secret", demo_runner=None, room_mode="single")
+    with TestClient(app) as client:
+        token = client.post(
+            "/api/v1/room/join",
+            json={"roomCode": "MAIN", "nickname": "房主", "deviceType": "pc"},
+        ).json()["data"]["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        client.post(
+            "/api/v1/match/report?roomCode=MAIN",
+            json={
+                "protocolVersion": 1,
+                "clientVersion": "test",
+                "platform": "5e",
+                "matchId": "g161-never-started",
+                "mapName": "de_unknown",
+                "phase": "ready",
+                "teams": {"ct": [], "t": []},
+            },
+            headers=headers,
+        )
+
+        hub = client.app.state.hub
+        session = hub.store.get_session_by_key("5e:g161-never-started")
+        assert session is not None
+        # 没配 demo_runner 时不会进入 waiting，pending 也算「在等地图」
+        assert session.demo_state in {"pending", "waiting"}
+
+        # 时间没到：不动
+        assert hub.abandon_stale_unmapped() == 0
+        assert session.demo_state in {"pending", "waiting"}
+
+        # 超过阈值：标成跳过
+        session.created_at -= 120
+        assert hub.abandon_stale_unmapped() == 1
+        assert session.demo_state == "skipped"
+        assert session.tactics_state == "skipped"
+        # 幂等：再跑一次不重复计数
+        assert hub.abandon_stale_unmapped() == 0
+
+
+def test_unmapped_session_is_abandoned_after_the_timeout(monkeypatch):
+    """准备阶段取消的对局永远等不到地图，别让轨迹页一直转圈。"""
+
+    from app import hub as hub_mod, settings as app_settings
+
+    monkeypatch.setattr(app_settings, "STALE_MAP_SECONDS", 60)
+    app = create_app(secret="test-secret", demo_runner=None, room_mode="single")
+    with TestClient(app) as client:
+        token = client.post(
+            "/api/v1/room/join",
+            json={"roomCode": "MAIN", "nickname": "房主", "deviceType": "pc"},
+        ).json()["data"]["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        client.post(
+            "/api/v1/match/report?roomCode=MAIN",
+            json={
+                "protocolVersion": 1,
+                "clientVersion": "test",
+                "platform": "5e",
+                "matchId": "g161-never-started",
+                "mapName": "de_unknown",
+                "phase": "ready",
+                "teams": {"ct": [], "t": []},
+            },
+            headers=headers,
+        )
+
+        hub = client.app.state.hub
+        session = hub.store.get_session_by_key("5e:g161-never-started")
+        assert session is not None
+        # 没配 demo_runner 时不会进 waiting，pending 同样表示「在等地图」
+        assert session.demo_state in {"pending", "waiting"}
+
+        # 时间没到：不动
+        assert hub.abandon_stale_unmapped() == 0
+        assert session.demo_state in {"pending", "waiting"}
+
+        # 超过阈值：标成跳过
+        session.created_at -= 120
+        assert hub.abandon_stale_unmapped() == 1
+        assert session.demo_state == "skipped"
+        assert session.tactics_state == "skipped"
+        # 幂等：再跑一次不重复计数
+        assert hub.abandon_stale_unmapped() == 0

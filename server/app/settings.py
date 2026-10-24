@@ -51,6 +51,11 @@ AI_KEY = (os.getenv("CS_HELPER_AI_KEY") or "").strip()
 # 上报密钥：设置后，只有带着这个密钥的客户端才能往房间里写对局数据。
 # 手机端只读、不需要它；桌面端在「小队协同」里填。留空表示不校验（局域网自用）。
 REPORT_KEY = (os.getenv("CS_HELPER_REPORT_KEY") or "").strip()
+
+# 上报了但对局地图一直没确认（5E 上查不到这局，多半是准备阶段没开成）：
+# 超过这个秒数就把轨迹标成 skipped，别让页面一直转圈。
+# 真地图后来到了也没关系——report_match 看到地图变了会把任务重新推起来。
+STALE_MAP_SECONDS = _int_env("CS_HELPER_STALE_MAP_SECONDS", 300, 60, 3600)
 AI_TIMEOUT = _int_env("CS_HELPER_AI_TIMEOUT", 90, 5, 300)
 # Reasoning models spend this budget on the hidden scratchpad first; too small a
 # value returns an empty answer. 3000 leaves room for ~500 chars of visible text.

@@ -441,6 +441,12 @@ class Store:
             self._session_ids[session.id] = session.key
             return True
 
+    def sessions(self) -> list[Session]:
+        """Snapshot of live sessions (housekeeping iterates a copy)."""
+
+        with self._lock:
+            return list(self._sessions.values())
+
     def get_session(self, session_id: str) -> Session | None:
         with self._lock:
             key = self._session_ids.get(session_id)
