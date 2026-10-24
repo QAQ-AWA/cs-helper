@@ -5,11 +5,11 @@ import type { P5ePostMatchReport } from '@platforms/5e/post-match';
 import type { AiAnalysisResult } from '@core/ai/types';
 import type { useTeamSync } from '../composables/useTeamSync';
 import { useMatchCountdown } from '../composables/useMatchCountdown';
+import AiAnalysisPanel from './AiAnalysisPanel.vue';
 import RosterBoard from './RosterBoard.vue';
 import ServerAnalysisPanel from './ServerAnalysisPanel.vue';
 import TacticalPathsPanel from './TacticalPathsPanel.vue';
 import PostMatchBoard from './PostMatchBoard.vue';
-import StoredAiReport from './StoredAiReport.vue';
 
 /**
  * One match, four questions: who is playing, what does the relay think, where
@@ -57,6 +57,22 @@ const sideLabel = computed(() => {
 const roomCode = computed(() => props.sync?.settings.value.roomCode ?? '');
 
 const hasAnalysis = computed(() => Boolean(props.sync?.serverMatch.value));
+
+/** 服务端给的结构化结果；历史回放退回本地存档的那一份。 */
+const aiResult = computed(() => props.sync?.serverMatch.value?.aiResult ?? props.storedAi ?? null);
+
+const aiStatus = computed<'pending' | 'running' | 'ready' | 'failed' | 'skipped'>(() => {
+  if (aiResult.value) return 'ready';
+  const state = props.sync?.serverMatch.value?.aiState;
+  if (state === 'running') return 'running';
+  if (state === 'failed') return 'failed';
+  if (state === 'skipped') return 'skipped';
+  return 'pending';
+});
+
+const aiError = computed(() => props.sync?.aiError.value ?? null);
+/** 老会话只有 Markdown，没有结构化结果。 */
+const aiText = computed(() => props.sync?.serverMatch.value?.aiText ?? '');
 const postReport = computed(
   () => props.sync?.serverMatch.value?.postReport ?? props.initialPostMatch ?? null,
 );
@@ -115,12 +131,19 @@ const postReport = computed(
         v-if="activeTab === 'roster'"
         :teams="match.detail.teams ?? []"
         :profiles="sync?.serverProfiles.value"
+        :my-side="mySide"
+        :player-signals="aiResult?.playerSignals ?? []"
+        :map-name="match.detail.mapName"
       />
-      <ServerAnalysisPanel v-else-if="activeTab === 'analysis' && hasAnalysis" :sync="sync!" />
-      <StoredAiReport
-        v-else-if="activeTab === 'analysis' && storedAi"
-        :report="storedAi"
+      <AiAnalysisPanel
+        v-else-if="activeTab === 'analysis' && (aiResult || hasAnalysis)"
+        :result="aiResult"
+        :status="aiStatus"
+        :error="aiError"
+        self-side="A"
+        @analyze="sync?.rerunAnalysis()"
       />
+      <ServerAnalysisPanel v-else-if="activeTab === 'analysis' && aiText" :sync="sync!" />
       <div
         v-else-if="activeTab === 'analysis'"
         class="flex h-full items-center justify-center px-6 text-center text-sm text-fg-muted"

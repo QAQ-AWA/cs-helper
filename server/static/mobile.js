@@ -144,9 +144,13 @@ function handle(action, payload) {
       if (payload.phase === 'thinking') {
         $('ai').classList.add('thinking');
         $('ai').textContent = `AI 正在推理对手数据…${payload.chars ? `（${payload.chars} 字）` : ''}`;
-      } else {
+      } else if (typeof payload.accumulated === 'string') {
         $('ai').classList.remove('thinking');
-        renderAiText(payload.accumulated || '');
+        renderAiText(payload.accumulated);
+      } else {
+        // 结构化结果是整段 JSON，边生成边渲染只会看到半截 JSON，这里只推进度。
+        $('ai').classList.add('thinking');
+        $('ai').textContent = `AI 正在生成报告…${payload.chars ? `（${payload.chars} 字）` : ''}`;
       }
       break;
     case 'AI_REPORT_READY':

@@ -3,6 +3,7 @@ import { teamSyncClient } from '@core/sync/sync-client';
 import type { SyncSettings, SyncStatus } from '@core/sync/types';
 import type { MatchRecord } from '@core/match/models';
 import type { P5ePostMatchReport } from '@platforms/5e/post-match';
+import type { AiAnalysisResultV3 } from '@core/ai/types';
 import { clientLog, setClientLogServer } from '@core/log/client-log';
 
 /** The slice of the relay's session that the desktop renders. */
@@ -19,6 +20,8 @@ export interface ServerMatchView {
   homeCoverage?: number;
   aiState?: string;
   aiText?: string | null;
+  /** 结构化分析结果（v3）；老会话只有 aiText。 */
+  aiResult?: AiAnalysisResultV3 | null;
   tacticsState?: string;
   tacticsText?: string | null;
   postReport?: P5ePostMatchReport | null;
@@ -47,6 +50,8 @@ export function useTeamSync() {
   const serverProfiles = ref<ServerPlayerView[]>([]);
   const sideBusy = ref(false);
   const sideError = ref<string | null>(null);
+  /** 上一次分析失败的原因（面板上要能说清楚，而不是空着）。 */
+  const aiError = ref<string | null>(null);
 
   let unsubscribe: (() => void) | null = null;
 
@@ -94,11 +99,14 @@ export function useTeamSync() {
           aiStreamChunk.value = payload.accumulated;
         }
       } else if (event === 'AI_REPORT_READY') {
-        const payload = data as { report?: string };
+        const payload = data as { report?: string; result?: AiAnalysisResultV3 | null };
         aiReport.value = data;
-        if (typeof payload?.report === 'string') {
-          mergeMatch({ aiText: payload.report, aiState: 'ready' });
-        }
+        aiError.value = null;
+        mergeMatch({
+          aiText: typeof payload?.report === 'string' ? payload.report : null,
+          aiState: 'ready',
+          aiResult: payload?.result ?? null,
+        });
       } else if (event === 'AI_TACTICS_CHUNK') {
         const payload = data as { accumulated?: string };
         if (payload?.accumulated) {
@@ -113,6 +121,8 @@ export function useTeamSync() {
         const payload = data as { stage?: string; message?: string };
         if (payload?.stage === 'home') {
           mergeMatch({ homeError: payload.message ?? null, homeState: 'signature' });
+        } else if (payload?.stage === 'ai') {
+          aiError.value = payload.message ?? '分析失败';
         }
       } else if (event === 'matchReported') {
         lastReportedAt.value = Date.now();
@@ -179,6 +189,26 @@ export function useTeamSync() {
    * carry `all: true`, otherwise an ID-library hit immediately takes the side
    * back and the button looks broken.
    */
+  /** 让服务端重跑一次分析（不动轨迹下载）。 */
+  async function rerunAnalysis() {
+    const { enabled, serverUrl, roomCode, token } = settings.value;
+    if (!enabled || !roomCode || !token) return;
+    aiError.value = null;
+    try {
+      const res = await fetch(
+        `${serverUrl.replace(/\/+$/, '')}/api/v1/room/${encodeURIComponent(roomCode)}/analysis/rerun`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      );
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.code !== 0) {
+        throw new Error(json?.message || '重跑失败');
+      }
+      mergeMatch({ aiState: json.data?.aiState ?? 'running' });
+    } catch (err) {
+      aiError.value = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   async function setAnalysisSide(side: 'ct' | 't' | null) {
     const { enabled, serverUrl, roomCode, token } = settings.value;
     if (!enabled || !roomCode || !token) return;
@@ -220,6 +250,8 @@ export function useTeamSync() {
     serverProfiles,
     sideBusy,
     sideError,
+    aiError,
+    rerunAnalysis,
     createRoom,
     joinRoom,
     disconnect,

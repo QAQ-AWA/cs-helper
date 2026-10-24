@@ -104,17 +104,28 @@ export class ReplayPlayer {
   }
 
   _loadRadar(url) {
-    const image = new Image();
-    image.decoding = 'async';
-    image.onload = () => {
-      this._radar = image;
-      this._draw();
+    // 桌面端页面来自 tauri://localhost，雷达图是跨源图片：不带 CORS 会把 canvas
+    // 标记成 tainted（能画不能读像素）。先按 anonymous 取，拿不到再退回普通加载，
+    // 这样即使反向代理吞掉了 CORS 头，雷达图至少还能显示。
+    const attempt = (useCors) => {
+      const image = new Image();
+      if (useCors) image.crossOrigin = 'anonymous';
+      image.decoding = 'async';
+      image.onload = () => {
+        this._radar = image;
+        this._draw();
+      };
+      image.onerror = () => {
+        if (useCors) {
+          attempt(false);
+          return;
+        }
+        this._radarFailed = true;
+        this._draw();
+      };
+      image.src = url;
     };
-    image.onerror = () => {
-      this._radarFailed = true;
-      this._draw();
-    };
-    image.src = url;
+    attempt(true);
   }
 
   _resize() {

@@ -21,7 +21,16 @@ from threading import Lock
 from typing import Any, Callable, Iterator, Protocol
 
 from . import adapters, settings
-from .ai import TACTICS_SYSTEM_PROMPT, build_prompt, build_tactics_prompt
+from .ai import (
+    STRUCTURED_SYSTEM_PROMPT,
+    TACTICS_SYSTEM_PROMPT,
+    build_repair_prompt,
+    build_structured_prompt,
+    build_tactics_prompt,
+    structured_allowed_players,
+)
+from .analysis_result import parse_analysis_result, render_markdown
+from .evidence import build_evidence
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
 from .events import Action
@@ -267,15 +276,10 @@ class JobManager:
             session.ai_state = "running"
         return self.submit("ai", session, self._ai_work)
 
-    def _ai_work(self, session: Session) -> None:
-        assert self._ai_client is not None
-        players = session.profiles or adapters.normalise_players(session.report)
-        prompt = build_prompt(
-            session.map_name,
-            players,
-            self._side(session),
-        )
+    def _stream_ai(self, session: Session, prompt: str, system: str | None) -> str:
+        """One streamed call; returns the accumulated answer text."""
 
+        assert self._ai_client is not None
         accumulated = ""
         last_emit = 0.0
         # Reasoning models emit a hidden scratchpad first. Surface its size as a
@@ -295,24 +299,44 @@ class JobManager:
                     {"sessionId": session.id, "phase": "thinking", "chars": reason_chars},
                 )
 
-        for chunk in self._ai_client.stream(prompt, on_reason=on_reason):
+        for chunk in self._ai_client.stream(prompt, on_reason=on_reason, system=system):
             if not chunk:
                 continue
             accumulated += chunk
             now = time.monotonic()
             if now - last_emit >= STREAM_EMIT_INTERVAL:
                 last_emit = now
+                # 结构化结果不能边生成边渲染（那是半个 JSON），只推进度。
                 self._emit_session(
                     session,
                     Action.AI_STREAM_CHUNK,
-                    {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
+                    {"sessionId": session.id, "phase": "writing", "chars": len(accumulated)},
                 )
+        return accumulated
 
-        if not accumulated.strip():
+    def _ai_work(self, session: Session) -> None:
+        assert self._ai_client is not None
+        players = session.profiles or adapters.normalise_players(session.report)
+        side = self._side(session)
+        evidence = build_evidence(session.map_name, players, side)
+        allowed = structured_allowed_players(evidence, side)
+
+        raw = self._stream_ai(
+            session,
+            build_structured_prompt(evidence, side),
+            STRUCTURED_SYSTEM_PROMPT,
+        )
+        result = parse_analysis_result(raw, allowed_players=allowed)
+        if result is None and raw.strip():
+            # 模型偶尔会把 JSON 包在解释文字里，给一次纯格式修复的机会。
+            raw = self._stream_ai(session, build_repair_prompt(raw), STRUCTURED_SYSTEM_PROMPT)
+            result = parse_analysis_result(raw, allowed_players=allowed)
+
+        if result is None:
             session.ai_state = "failed"
-            detail = "模型只输出了推理过程，没有正文，可调大 CS_HELPER_AI_MAX_TOKENS"
-            if reason_chars:
-                detail = f"{detail}（本次推理 {reason_chars} 字）"
+            detail = "模型没有返回可解析的分析结果"
+            if not raw.strip():
+                detail = "模型只输出了推理过程，没有正文，可调大 CS_HELPER_AI_MAX_TOKENS"
             self._emit_session(
                 session,
                 Action.ROOM_ERROR,
@@ -320,17 +344,23 @@ class JobManager:
             )
             return
 
-        session.ai_text = accumulated
+        session.ai_result = result
+        session.ai_text = render_markdown(result)
         session.ai_state = "ready"
         self._emit_session(
             session,
             Action.AI_STREAM_CHUNK,
-            {"sessionId": session.id, "phase": "writing", "accumulated": accumulated},
+            {"sessionId": session.id, "phase": "writing", "accumulated": session.ai_text},
         )
         self._emit_session(
             session,
             Action.AI_REPORT_READY,
-            {"sessionId": session.id, "report": accumulated, "model": settings.AI_MODEL},
+            {
+                "sessionId": session.id,
+                "report": session.ai_text,
+                "result": result,
+                "model": settings.AI_MODEL,
+            },
         )
 
     # -- demo ----------------------------------------------------------

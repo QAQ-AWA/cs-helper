@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { MatchPlayer, MatchTeam } from '@core/match/models';
+import type { AiPlayerSignal } from '@core/ai/types';
 import type { ServerPlayerView } from '../composables/useTeamSync';
+import { getTeamTableColumnDefs } from './team-table-columns';
+import TeamPlayerTable from './TeamPlayerTable.vue';
 
 /**
- * The roster the user actually needs before a match: who is on each side and
- * how good they are. Server-reported season numbers win over whatever the
- * client scraped, because the relay fills the gaps the client could not.
+ * 赛前阵容：按队伍列 10 人，可排序、可点开细节。
+ *
+ * 数据来源是服务端补齐后的赛季数据（覆盖客户端抓到的值），因为 5E 页面上
+ * 有些人的赛季字段是空的，服务端 player/home 才拿得到全量。
  */
 const props = defineProps<{
   teams: MatchTeam[];
   profiles?: ServerPlayerView[];
+  mySide?: 'ct' | 't' | null;
+  playerSignals?: AiPlayerSignal[];
+  mapName?: string;
 }>();
 
 const SIDE_ORDER = [
@@ -18,118 +25,95 @@ const SIDE_ORDER = [
   { key: 't' as const, teamIndex: 1, label: 'T' },
 ];
 
-interface Row {
-  key: string;
-  name: string;
-  rating: number | null;
-  adr: number | null;
-  kd: number | null;
-  hs: number | null;
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function num(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-/** 0-1 fractions (client) and percentages (server) both land here. */
-function pct(value: unknown): number | null {
+/** 服务端给的是百分数（46.0），表格要 0-1 的小数。 */
+function fraction(value: unknown): number | undefined {
   const raw = num(value);
-  if (raw === null) return null;
-  return raw <= 1 ? raw * 100 : raw;
+  if (raw === undefined) return undefined;
+  return raw > 1 ? raw / 100 : raw;
 }
 
-function serverStats(player: MatchPlayer) {
+function serverStats(player: MatchPlayer): Record<string, unknown> {
   const match = (props.profiles ?? []).find(
     (item) => item.nickname && item.nickname === player.nickname,
   );
   return (match?.stats ?? {}) as Record<string, unknown>;
 }
 
-function rowsFor(teamIndex: number): Row[] {
-  const team = props.teams?.[teamIndex];
-  const players = team?.players ?? [];
-  return players
-    .map((player) => {
-      const stats = serverStats(player);
-      return {
-        key: player.steamId || player.nickname,
-        name: player.nickname || 'Unknown',
-        rating: num(stats.seasonRating) ?? num(stats.rating) ?? num(player.seasonRating) ?? num(player.rating),
-        adr: num(stats.seasonAdr) ?? num(player.adpr),
-        kd: num(stats.kd) ?? num(player.kd),
-        hs: pct(stats.headshotRate) ?? pct(player.hsRate),
-      };
-    })
-    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+function recentResults(value: unknown): MatchPlayer['recentResults'] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = value
+    .toUpperCase()
+    .split('')
+    .filter((flag) => flag === 'W' || flag === 'L' || flag === 'D')
+    .map((flag) => (flag === 'W' ? 'win' : flag === 'L' ? 'lose' : 'draw'));
+  return parsed.length ? (parsed as MatchPlayer['recentResults']) : undefined;
 }
+
+/** 服务端的赛季数据优先，客户端抓到的值兜底。 */
+function withServerStats(player: MatchPlayer): MatchPlayer {
+  const stats = serverStats(player);
+  return {
+    ...player,
+    score: num(stats.elo) ?? player.score,
+    rating: num(stats.rating) ?? player.rating,
+    seasonRating: num(stats.seasonRating) ?? player.seasonRating,
+    adpr: num(stats.seasonAdr) ?? player.adpr,
+    weRaw: num(stats.seasonRws) ?? player.weRaw,
+    kd: num(stats.kd) ?? player.kd,
+    hsRate: fraction(stats.headshotRate) ?? player.hsRate,
+    firstKillSuccessRate: fraction(stats.firstKillRate) ?? player.firstKillSuccessRate,
+    seasonWinRate: fraction(stats.winRate) ?? player.seasonWinRate,
+    seasonTotalNum: num(stats.matchesPlayed) ?? player.seasonTotalNum,
+    rankDesc: (stats.rankDesc as string) ?? player.rankDesc,
+    rankLevel: (stats.rankLevel as string) ?? player.rankLevel,
+    rankNum: num(stats.rankNum) ?? player.rankNum,
+    eloChange: num(stats.eloChange) ?? player.eloChange,
+    recentResults: recentResults(stats.recentResults) ?? player.recentResults,
+  };
+}
+
+const columns = computed(() =>
+  getTeamTableColumnDefs('5e').filter((column) => column.fixed || column.defaultVisible),
+);
 
 const sides = computed(() =>
   SIDE_ORDER.map((side) => {
-    const rows = rowsFor(side.teamIndex);
-    const ratings = rows.map((row) => row.rating).filter((value): value is number => value !== null);
-    const avg = ratings.length ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : null;
-    return { ...side, rows, avg };
+    const raw = props.teams?.[side.teamIndex];
+    // 我方永远是 A（蓝色），跟服务端的 A/B 定义保持一致。
+    const token: 'A' | 'B' = !props.mySide
+      ? side.key === 'ct' ? 'A' : 'B'
+      : side.key === props.mySide ? 'A' : 'B';
+    const team: MatchTeam = {
+      ...(raw ?? { side: token, id: side.teamIndex, players: [], singleCount: 0, partyGroups: [] }),
+      side: token,
+      players: (raw?.players ?? []).map(withServerStats),
+    };
+    return { ...side, token, team };
   }),
 );
 
-function ratingClass(value: number | null): string {
-  if (value === null) return 'text-fg-muted';
-  if (value >= 1.1) return 'text-success';
-  if (value < 0.95) return 'text-danger';
-  return 'text-fg';
-}
-
-function show(value: number | null, digits = 2): string {
-  return value === null ? '—' : value.toFixed(digits);
+function signalsFor(token: 'A' | 'B'): AiPlayerSignal[] {
+  return (props.playerSignals ?? []).filter((signal) => signal.side === token);
 }
 </script>
 
 <template>
-  <div class="grid h-full min-h-0 grid-cols-2 gap-3 overflow-y-auto p-3">
-    <section
+  <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto bg-slate-50/70 px-4 py-3">
+    <TeamPlayerTable
       v-for="side in sides"
       :key="side.key"
-      class="min-h-0 self-start rounded-lg border border-border bg-surface"
-    >
-      <header class="border-b border-border px-3 py-2">
-        <div class="flex items-baseline justify-between">
-          <span class="text-xs font-semibold" :class="side.key === 'ct' ? 'text-team-a' : 'text-team-b'">
-            {{ side.label }}
-          </span>
-          <span class="text-[11px] text-fg-muted">
-            {{ side.rows.length }} 人<template v-if="side.avg !== null"> · 均 {{ side.avg.toFixed(2) }}</template>
-          </span>
-        </div>
-        <div
-          class="mt-1 grid grid-cols-[minmax(0,1fr)_44px_40px_44px_40px] gap-1 text-[10px] text-fg-muted"
-        >
-          <span />
-          <span class="text-right">Rating</span>
-          <span class="text-right">ADR</span>
-          <span class="text-right">K/D</span>
-          <span class="text-right">HS%</span>
-        </div>
-      </header>
-
-      <div v-if="!side.rows.length" class="px-3 py-3 text-xs text-fg-muted">暂无数据</div>
-
-      <div
-        v-for="row in side.rows"
-        :key="row.key"
-        class="grid grid-cols-[minmax(0,1fr)_44px_40px_44px_40px] items-baseline gap-1 px-3 py-1.5 text-[12px] odd:bg-elevated/40"
-      >
-        <span class="truncate text-fg">{{ row.name }}</span>
-        <span class="text-right font-medium tabular-nums" :class="ratingClass(row.rating)">
-          {{ show(row.rating) }}
-        </span>
-        <span class="text-right tabular-nums text-fg-secondary">
-          {{ row.adr === null ? '—' : Math.round(row.adr) }}
-        </span>
-        <span class="text-right tabular-nums text-fg-secondary">{{ show(row.kd) }}</span>
-        <span class="text-right tabular-nums text-fg-secondary">
-          {{ row.hs === null ? '—' : `${Math.round(row.hs)}%` }}
-        </span>
-      </div>
-    </section>
+      :team="side.team"
+      :columns="columns"
+      :title="`${side.label} · ${side.token === 'A' ? '我方' : '对方'}`"
+      :side-token="side.token"
+      :player-signals="signalsFor(side.token)"
+      :current-map="mapName"
+      :platform-id="'5e'"
+      self-side="A"
+    />
   </div>
 </template>

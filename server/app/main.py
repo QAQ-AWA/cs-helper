@@ -386,6 +386,20 @@ def create_app(
             }
         )
 
+    @app.post("/api/v1/room/{code}/analysis/rerun")
+    def rerun_analysis(
+        code: str,
+        authorization: str | None = Header(default=None),
+    ):
+        """Re-run the AI pass without touching the demo job."""
+
+        room, _member = require_room(authorization, code)
+        try:
+            session = hub.rerun_analysis(room)
+        except RoomNotFound:
+            raise ApiError("房间里还没有对局", code=1009, status=409) from None
+        return ok({"aiState": session.ai_state})
+
     # -- identity library ----------------------------------------------
     @app.get("/api/v1/identity")
     def identity_summary(

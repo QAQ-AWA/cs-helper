@@ -237,6 +237,21 @@ class RoomHub:
             self.jobs.submit_demo(session)
         return session
 
+    def rerun_analysis(self, room: Room) -> Session:
+        """Force a fresh AI pass; the analysis panel's 重新分析 button."""
+
+        session = self.store.get_session(room.session_id) if room.session_id else None
+        if session is None:
+            raise RoomNotFound(room.code)
+        if session.ai_state == "running":
+            return session
+        session.ai_state = "pending"
+        session.updated_at = time.time()
+        self.persist(session)
+        self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
+        self.jobs.submit_ai(session)
+        return session
+
     def report_post_match(self, room: Room, report: dict[str, Any]) -> Session:
         """赛后面板的数据由客户端取回，服务端只负责归档与广播。"""
 

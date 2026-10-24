@@ -1,3 +1,4 @@
+import json
 import time
 
 import pytest
@@ -8,11 +9,45 @@ from app.ai import build_prompt, iter_sse_deltas, iter_sse_events
 from app.engine_runner import DemoOutcome
 from app.main import create_app
 
+# 分析这一轮要的是 v3 JSON，开局预判那一轮仍是 Markdown。
+ANALYSIS_RESULT = {
+    "schemaVersion": 3,
+    "predictedWinner": "A",
+    "modelWinProbability": {"A": 58, "B": 42},
+    "confidence": 72,
+    "headline": "A 队更被看好",
+    "decisiveFactors": [
+        {
+            "dimension": "strength",
+            "advantage": "A",
+            "impact": 3,
+            "title": "整体更强",
+            "summary": "Alpha 的 Rating 1.18 高于 Bravo 的 0.95",
+        }
+    ],
+    "playerSignals": [
+        {
+            "steamId": "76561198000000002",
+            "side": "A",
+            "kind": "carry",
+            "impact": 2,
+            "title": "强点",
+            "summary": "Rating 1.18、K/D 1.25 都是全场最高",
+        }
+    ],
+    "teamPlans": {
+        "A": {"winConditions": [{"text": "先控中路"}], "risks": []},
+        "B": {"winConditions": [], "risks": [{"text": "枪法吃亏"}]},
+    },
+    "uncertainties": ["样本偏少"],
+}
+
 
 class FakeAi:
-    def __init__(self, chunks=("结论：A 队略优。\n", "建议：先控中路。"), reasons=()):
+    def __init__(self, chunks=("结论：A 队略优。\n", "建议：先控中路。"), reasons=(), analysis=None):
         self.chunks = chunks
         self.reasons = reasons
+        self.analysis = analysis if analysis is not None else json.dumps(ANALYSIS_RESULT, ensure_ascii=False)
         self.prompts: list[str] = []
         self.systems: list[str | None] = []
 
@@ -22,6 +57,12 @@ class FakeAi:
         for thought in self.reasons:
             if on_reason is not None:
                 on_reason(thought)
+        if system and "只输出 JSON" in system and self.analysis:
+            # 分两段吐，模拟真实流式，验证半截 JSON 不会被当成结果。
+            half = len(self.analysis) // 2
+            yield self.analysis[:half]
+            yield self.analysis[half:]
+            return
         for chunk in self.chunks:
             yield chunk
 
@@ -76,16 +117,20 @@ def test_ai_runs_once_after_profile_and_broadcasts(ai_client):
             message = ws.receive_json()
             seen.append(message["action"])
             if message["action"] == "AI_STREAM_CHUNK":
-                streamed = message["payload"]["accumulated"]
+                # 生成过程中只推进度（chars），完整文本在最后一帧才给。
+                streamed = message["payload"].get("accumulated", streamed)
             if message["action"] == "AI_REPORT_READY":
                 report = message["payload"]
                 break
 
     assert "PROFILE_READY" in seen
     assert "AI_REPORT_READY" in seen
-    assert streamed.strip().startswith("结论")
+    # 结构化结果的手机版是本地渲染的 Markdown，不是模型原文。
+    assert streamed.strip().startswith("## 结论")
     assert report and report["report"] == streamed
     assert report["model"]
+    assert report["result"]["schemaVersion"] == 3
+    assert report["result"]["playerSignals"][0]["nickname"] == "Alpha"
 
 
 def test_ai_text_is_kept_for_reconnects(ai_client):
@@ -159,7 +204,7 @@ def test_reasoning_shows_as_progress_and_empty_body_is_reported():
         secret="test-secret",
         demo_runner=None,
         room_mode="multi",
-        ai_client=FakeAi(chunks=(), reasons=("先看 CT 的 Rating 分布", "再看 T 的尖点")),
+        ai_client=FakeAi(chunks=(), reasons=("先看 CT 的 Rating 分布", "再看 T 的尖点"), analysis=""),
     )
     with TestClient(app) as client:
         room = _room(client)

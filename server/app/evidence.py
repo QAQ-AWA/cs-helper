@@ -122,6 +122,7 @@ def build_evidence(
         stats = player.get("stats") or {}
         rows.append(
             {
+                "steamId": player.get("steamId") or "",
                 "name": player.get("nickname") or "Unknown",
                 "side": player.get("team") or "",
                 "role": role_for(player.get("team") or ""),

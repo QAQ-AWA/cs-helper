@@ -28,10 +28,10 @@ const view = params.get('view') ?? 'panel';
 const tab = params.get('tab') ?? 'roster';
 
 const PROFILES = [
-  { nickname: '半团空气', team: 'ct', stats: { rating: 1.09, seasonAdr: 78, kd: 0.93 } },
-  { nickname: '背身步马枪', team: 'ct', stats: { rating: 1.06, seasonAdr: 86, kd: 0.88 } },
-  { nickname: 'Z大爷', team: 't', stats: { rating: 1.08, seasonAdr: 106, kd: 1.31 } },
-  { nickname: 'Farewell-海海', team: 't', stats: { rating: 1.09, seasonAdr: 74, kd: 0.91 } },
+  { nickname: '半团空气', team: 'ct', stats: { rating: 1.09, seasonRating: 1.09, seasonAdr: 78, seasonRws: 10.4, kd: 0.93, headshotRate: 35, winRate: 52, matchesPlayed: 63, elo: 2140, recentResults: 'WWLWW' } },
+  { nickname: '背身步马枪', team: 'ct', stats: { rating: 1.06, seasonRating: 1.06, seasonAdr: 86, seasonRws: 9.8, kd: 0.88, headshotRate: 41, winRate: 49, matchesPlayed: 88, elo: 2055, recentResults: 'LWWLW' } },
+  { nickname: 'Z大爷', team: 't', stats: { rating: 1.08, seasonRating: 1.08, seasonAdr: 106, seasonRws: 12.1, kd: 1.31, headshotRate: 52, winRate: 55, matchesPlayed: 117, elo: 2188, recentResults: 'WLWWW' } },
+  { nickname: 'Farewell-海海', team: 't', stats: { rating: 1.09, seasonRating: 1.09, seasonAdr: 74, seasonRws: 8.7, kd: 0.91, headshotRate: 38, winRate: 44, matchesPlayed: 41, elo: 1980, recentResults: 'LLWLL' } },
 ];
 
 const AI_TEXT = `## 结论
@@ -50,6 +50,105 @@ CT 更被看好，但优势不来自枪法，而是对面 T 边的下包点过�
 - 前两回合重点照顾 A 区，对面 11 个下包回合里 7 次打 A
 - 中路给一颗烟，切断对面转点
 - 让 ADR 最高的队友守 A 小道`;
+
+const AI_RESULT = {
+  schemaVersion: 3,
+  predictedWinner: 'A' as const,
+  modelWinProbability: { A: 58, B: 42 },
+  winProbability: { A: 58, B: 42 },
+  confidence: 72,
+  dataCoverage: 0.8,
+  headline: 'CT 首杀优势明显，对面靠枪法硬拼',
+  decisiveFactors: [
+    {
+      id: 'f1',
+      dimension: 'opening' as const,
+      advantage: 'A' as const,
+      impact: 3 as const,
+      title: '首杀控制权',
+      summary: 'CT 首杀成功率 66.7%，对面仅 33.3%，开局拿人头的概率是对方两倍',
+      evidence: [],
+    },
+    {
+      id: 'f2',
+      dimension: 'aim' as const,
+      advantage: 'B' as const,
+      impact: 2 as const,
+      title: '对面爆头更狠',
+      summary: '对面爆头率 57% 高于我方 46%，正面拼枪可能吃亏',
+      evidence: [],
+    },
+    {
+      id: 'f3',
+      dimension: 'strength' as const,
+      advantage: 'Even' as const,
+      impact: 2 as const,
+      title: '整体实力持平',
+      summary: '双方 Rating 1.00 对 1.01、ADR 77.5 对 76.3，几乎完全对等',
+      evidence: [],
+    },
+  ],
+  playerSignals: [
+    {
+      steamId: '76561198000000001',
+      nickname: '半团空气',
+      side: 'A' as const,
+      kind: 'carry' as const,
+      impact: 2 as const,
+      title: '首杀尖刀',
+      summary: 'Rating 1.08、ADR 82.2、RWS 12.0、首杀成功率 80%',
+      evidence: [],
+    },
+    {
+      steamId: '76561198000000002',
+      nickname: '背身步马枪',
+      side: 'A' as const,
+      kind: 'specialist' as const,
+      impact: 1 as const,
+      title: '首杀支点',
+      summary: '首杀成功率 80%、爆头率 55%，但 RWS 9.3 偏低',
+      evidence: [],
+    },
+    {
+      steamId: '76561198000000003',
+      nickname: 'Z大爷',
+      side: 'B' as const,
+      kind: 'carry' as const,
+      impact: 3 as const,
+      title: '对面最强火力',
+      summary: 'Rating 1.12、K/D 1.23、ADR 83.2，是对面唯一稳定正贡献点',
+      evidence: [],
+    },
+    {
+      steamId: '76561198000000004',
+      nickname: 'Farewell-海海',
+      side: 'B' as const,
+      kind: 'weakLink' as const,
+      impact: 2 as const,
+      title: '对面短板',
+      summary: 'Rating 0.94、K/D 0.90、ADR 71.4，多项低于分界',
+      evidence: [],
+    },
+  ],
+  teamPlans: {
+    A: {
+      winConditions: [
+        { text: '利用 66.7% 首杀成功率，主动抢 A 大和中路首杀', evidence: [] },
+        { text: '稳守长枪线，把比赛拖进人数优势残局', evidence: [] },
+      ],
+      risks: [{ text: '全队爆头率 46% 低于对面 57%，正面拼枪可能吃亏', evidence: [] }],
+    },
+    B: {
+      winConditions: [{ text: '靠 Z大爷 的前压找首杀，把节奏拖快', evidence: [] }],
+      risks: [{ text: '首杀成功率只有 33.3%，一旦开局掉人很难翻', evidence: [] }],
+    },
+  },
+  uncertainties: [
+    '双方 KAST 和残局胜率缺失，无法评估残局能力',
+    '半团空气、Farewell-海海 样本仅 16-17 场，数据波动大',
+  ],
+  dataQuality: '赛季数据 8 项中 6 项可用',
+};
 
 const TACTICS_TEXT = `## 开局选点预判
 对面 T 边明显偏 A：11 个下包回合里 7 次打 A，平均 39.8 秒完成下包。
@@ -92,10 +191,11 @@ function makeMatch(state: Scenario) {
       homeCoverage: 0,
       homeError: '5E 签名已失效，赛季数据（ADR/RWS/KAST）这次没拿到，仅用本场数据。',
       aiText: AI_TEXT,
+      aiResult: AI_RESULT,
       tacticsText: TACTICS_TEXT,
     };
   }
-  return { ...base, aiText: AI_TEXT, tacticsText: TACTICS_TEXT };
+  return { ...base, aiText: AI_TEXT, aiResult: AI_RESULT, tacticsText: TACTICS_TEXT };
 }
 
 const POST_REPORT = {
@@ -130,14 +230,16 @@ const sync = {
   tacticsStream: ref(''),
   sideBusy: ref(false),
   sideError: ref<string | null>(null),
+  aiError: ref<string | null>(null),
   setAnalysisSide: async () => {},
+  rerunAnalysis: async () => {},
   settings: ref({ roomCode: 'MAIN', enabled: true }),
   status: ref('connected'),
 };
 
-function localPlayer(name: string, teamSide: number, rating: number, adr: number, kd: number, hs: number) {
+function localPlayer(name: string, steamId: string, teamSide: number, rating: number, adr: number, kd: number, hs: number) {
   return {
-    steamId: `7656119800000000${teamSide}${Math.round(rating * 100)}`,
+    steamId,
     nickname: name,
     teamSide,
     isSingle: false,
@@ -169,8 +271,8 @@ const MATCH_RECORD = {
         singleCount: 0,
         partyGroups: [],
         players: [
-          localPlayer('半团空气', 0, 1.09, 78, 0.93, 0.35),
-          localPlayer('背身步马枪', 0, 1.06, 86, 0.88, 0.41),
+          localPlayer('半团空气', '76561198000000001', 0, 1.09, 78, 0.93, 0.35),
+          localPlayer('背身步马枪', '76561198000000002', 0, 1.06, 86, 0.88, 0.41),
         ],
       },
       {
@@ -179,8 +281,8 @@ const MATCH_RECORD = {
         singleCount: 0,
         partyGroups: [],
         players: [
-          localPlayer('Z大爷', 1, 1.08, 106, 1.31, 0.52),
-          localPlayer('Farewell-海海', 1, 1.09, 74, 0.91, 0.38),
+          localPlayer('Z大爷', '76561198000000003', 1, 1.08, 106, 1.31, 0.52),
+          localPlayer('Farewell-海海', '76561198000000004', 1, 1.09, 74, 0.91, 0.38),
         ],
       },
     ],

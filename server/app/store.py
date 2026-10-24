@@ -95,6 +95,8 @@ class Session:
     home_coverage: int = 0
     ai_state: str = "pending"  # pending | running | ready | skipped | failed
     ai_text: str | None = None
+    # 结构化分析结果（v3）：客户端按卡片渲染，ai_text 是给手机看的纯文本版。
+    ai_result: dict[str, Any] | None = None
     # Second AI pass: opening habits read off the parsed trajectories.
     tactics_state: str = "pending"  # pending | running | ready | skipped | failed
     tactics_text: str | None = None
@@ -123,6 +125,7 @@ class Session:
             "artifactId": self.artifact_id,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
+            "aiResult": self.ai_result,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
             "postReport": self.post_report,
@@ -151,6 +154,7 @@ class Session:
             "homeCoverage": self.home_coverage,
             "aiState": self.ai_state,
             "aiText": self.ai_text,
+            "aiResult": self.ai_result,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
             "trajectory": self.trajectory,
@@ -180,6 +184,7 @@ class Session:
                 home_coverage=int(data.get("homeCoverage") or 0),
                 ai_state=str(data.get("aiState") or "pending"),
                 ai_text=data.get("aiText"),
+                ai_result=data.get("aiResult"),
                 tactics_state=str(data.get("tacticsState") or "pending"),
                 tactics_text=data.get("tacticsText"),
                 trajectory=data.get("trajectory"),
