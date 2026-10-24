@@ -223,11 +223,36 @@ const POST_REPORT = {
   fetchedAt: Date.now(),
 };
 
+const PATH_REPORT = {
+  summary: 'T 开局偏 A 侧施压，下包节奏中等偏慢',
+  tempo: '中性，平均 53 秒',
+  sitePreference: 'A 63% / B 37%',
+  players: [
+    {
+      nickname: '半团空气',
+      side: 'T',
+      habit: 'T 12 回合，A 侧 8 次、B 侧 4 次；A 下包 4 次、B 下包 1 次，平均 48.4 秒下包',
+      likely: '开局 20 秒内倾向在 A 大或 A 小附近做第一波试探，可能带闪',
+      counter: 'A 大第一身位架枪，20 秒左右给 A 大烟拖延，别主动前压',
+    },
+    {
+      nickname: 'Z大爷',
+      side: 'T',
+      habit: 'T 7 回合，A 侧 6 次、B 侧 1 次；平均 62.7 秒下包，节奏偏慢',
+      likely: '开局 20 秒内慢摸 A 大或 A 小，不急着进点',
+      counter: 'A 大保持架枪不主动对，A 小给烟封视野，等队友先动再反清',
+    },
+  ],
+  counters: ['A 大开局双架，第二身位留闪反清', 'B 通道给火拖慢，别主动前压', '20 秒后 A 小道补烟，防慢压'],
+};
+
 const sync = {
   serverMatch: ref(
     tab === 'post' && scenario !== 'empty'
       ? { ...(makeMatch(scenario) as object), postReport: POST_REPORT }
-      : makeMatch(scenario),
+      : scenario === 'empty'
+        ? makeMatch(scenario)
+        : { ...(makeMatch(scenario) as object), pathReport: PATH_REPORT },
   ),
   serverProfiles: ref(scenario === 'empty' ? [] : PROFILES),
   aiStreamChunk: ref(''),
