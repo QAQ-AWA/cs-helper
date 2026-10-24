@@ -80,6 +80,8 @@ flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
 要求 Flutter 3.24+、JDK 17+、Android SDK 36。手机与电脑在同一 Wi-Fi，地址填
 `http://<电脑局域网IP>:8787`（不要填 `127.0.0.1`）。详见 [mobile/README.md](mobile/README.md)。
 
+独立仓库（CI 自动出 APK）：<https://github.com/QAQ-AWA/cs-helper-android>
+
 ### 构建与下载（无需本地 Rust）
 
 桌面端由 GitHub Actions 在 `windows-latest` 上构建：

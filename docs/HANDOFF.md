@@ -606,6 +606,17 @@ build-tools 36.0.0/36.1.0 + NDK 28.2 + CMake 3.22.1）、JDK 17、AGP 9.1.0、Gr
 - Windows 上 Kotlin 增量缓存会 `Could not close incremental caches`，已在 `android/gradle.properties` 设
   `kotlin.incremental=false`。
 
+### 独立仓库与 CI
+
+`mobile/` 已同步到独立仓库 **<https://github.com/QAQ-AWA/cs-helper-android>**（首个提交 `e40bac2`）。
+两边代码同源，但独立仓库带自己的 `.github/workflows/build.yml`：
+
+- push `main` → 构建 universal + arm64 + armeabi-v7a，更新 `latest-build` 预发布；
+- 打 `v*` tag → 生成正式 Release（APK 直接可下）；
+- 工作流会先装 platform 35/36、build-tools 36、NDK 28.2、CMake 3.22.1，再跑 analyze/test/build。
+
+改客户端时两边都要同步；如果只改主仓库，记得把 `mobile/` 推到独立仓库（或在独立仓库直接改）。
+
 ### 未做
 
 - 历史对局列表（服务端 `/api/v1/history/sessions` 已就绪，客户端没入口）。
