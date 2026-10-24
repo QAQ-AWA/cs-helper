@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import tempfile
+import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -363,26 +364,42 @@ def search_player(username):
         return None, None
 
 
-def _get_public_matches(domain, match_type=9):
-    """Read one bounded Arena recent-match list and validate its response."""
+def _get_public_matches(domain, match_type=9, attempts=3):
+    """Read one bounded Arena recent-match list and validate its response.
+
+    Arena 偶尔会回一个「JSON 合法但没有 match 字段」的响应（实测同一批域名
+    几秒后重查就全好了）。这种抖动不能直接判定「这个人没 demo」，
+    所以这里做退避重试：0.6s / 1.5s 后再问一次。
+    """
+
     domain = validate_domain(domain)
     quoted_domain = requests.utils.quote(domain, safe="")
     suffix = "" if match_type is None else f"?match_type={match_type}"
     url = f"{ARENA}/api/data/player/{quoted_domain}{suffix}"
-    r = _session().get(url, timeout=TIMEOUT, headers=HEADERS)
-    r.raise_for_status()
-    payload = r.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("Arena returned a non-object response")
-    if payload.get("success") is False or payload.get("errcode") not in (None, 0, "0"):
-        raise RuntimeError(
-            f"Arena API error: {payload.get('message')} "
-            f"(errcode={payload.get('errcode')})"
-        )
-    matches = payload.get("match")
-    if not isinstance(matches, list):
-        raise RuntimeError("Arena response is missing a match list")
-    return matches
+
+    last_error: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            r = _session().get(url, timeout=TIMEOUT, headers=HEADERS)
+            r.raise_for_status()
+            payload = r.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError("Arena returned a non-object response")
+            if payload.get("success") is False or payload.get("errcode") not in (None, 0, "0"):
+                raise RuntimeError(
+                    f"Arena API error: {payload.get('message')} "
+                    f"(errcode={payload.get('errcode')})"
+                )
+            matches = payload.get("match")
+            if isinstance(matches, list):
+                return matches
+            raise RuntimeError("Arena response is missing a match list")
+        except Exception as exc:  # noqa: BLE001 - 网络抖动一律重试
+            last_error = exc
+            if attempt + 1 >= attempts:
+                break
+            time.sleep(0.6 * (attempt + 1))
+    raise last_error if last_error else RuntimeError("Arena lookup failed")
 
 
 def _matches_map(match, map_name):
@@ -518,7 +535,36 @@ def _get_public_fallback(domain, map_name, count, recent_matches, recent_ok):
     return results
 
 
-def get_demos_by_domain(domain, map_name, count=10):
+def get_demos_by_domain(domain, map_name, count=10, attempts=2):
+    """查一次 demo 列表；整体失败（5E 抖动）时隔 2 秒再来一遍。
+
+    真机上遇到过「同一批域名，一个人查到列表、另两个人报
+    Arena response is missing a match list」，几秒后手动重查又全部正常——
+    属于上游抖动，不该把这三个人的轨迹直接判死。
+    """
+
+    last: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return _get_demos_by_domain_once(domain, map_name, count)
+        except DemoLookupError as exc:
+            last = exc
+            # 只重试「上游抖了一下」这一类；真的没比赛/没这张图的 demo 就别浪费时间。
+            transient = any(
+                marker in str(exc)
+                for marker in ("missing a match list", "timed out", "Connection")
+            )
+            if not transient or attempt + 1 >= attempts:
+                break
+            log.warning(
+                "demo lookup for %s failed (attempt %d/%d), retrying: %s",
+                domain, attempt + 1, attempts, exc,
+            )
+            time.sleep(2.0)
+    raise last if last else DemoLookupError("demo lookup failed")
+
+
+def _get_demos_by_domain_once(domain, map_name, count=10):
     """Return up to ``count`` downloadable demos for a player and map.
 
     The public Arena endpoint bootstraps one recent match. The player's UUID
