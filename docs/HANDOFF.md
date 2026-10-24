@@ -497,6 +497,24 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 `crossOrigin=anonymous` 取，失败再退回普通加载：前者让 canvas 不被标记 tainted
 （能读像素），后者保证反向代理吞掉 CORS 头时雷达图至少还能显示。
 
+## 轨迹页的 AI 走位解读（2026-10-24）
+
+轨迹解析完只给一堆路径，用户看不出结论。现在 demo 就绪后会多跑一次结构化 AI：
+
+| 层 | 字段 | 说明 |
+| --- | --- | --- |
+| 队伍 | `summary` / `tempo` / `sitePreference` | 一句话总结、节奏（带平均下包秒数）、A-B 落包占比 |
+| 个人 | `habit` / `likely` / `counter` | 实际怎么走（带次数）、开局 20 秒大概率在哪、一条针对动作 |
+| 整队 | `counters` | 2-3 条可执行对策 |
+
+- 实现在 `server/app/path_report.py`，跑在「开局预判」之后，失败不影响已有结果
+- 事件 `PATHS_REPORT_READY`，会话字段 `pathReport`
+- 桌面端：轨迹页右侧默认态就是这张卡，点左侧选手才切到画布
+- 手机端：轨迹页顶部一张卡
+
+**注意**：名字必须能在名单里对上（`allowed_players`），模型写错人的条目会被丢掉——
+宁可少一个人，也不要出现不存在的选手。
+
 ## 5E 是分段落数据的（2026-10-24）
 
 真机看到的顺序：
