@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
@@ -11,9 +12,25 @@ const pkg = JSON.parse(
   await import('node:fs/promises').then((fs) => fs.readFile(path.resolve(rootDir, 'package.json'), 'utf8')),
 );
 
+// 「我装的是哪一版」必须能一眼看出来：版本号常年不变，只能靠构建标记。
+function buildStamp(): string {
+  let sha = 'dev';
+  try {
+    sha = execSync('git rev-parse --short HEAD', { cwd: rootDir, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    // 没有 git 信息（源码包）时退回 dev
+  }
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${sha} · ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_STAMP__: JSON.stringify(buildStamp()),
   },
   root: path.resolve(rootDir, 'src/mainview'),
   base: './',

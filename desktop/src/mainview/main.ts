@@ -24,7 +24,7 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   clientLog('ERROR', '未处理异常', String(event.reason));
 });
-clientLog('INFO', '启动', `客户端启动 ${__APP_VERSION__}`);
+clientLog('INFO', '启动', `客户端启动 ${__APP_VERSION__}（构建 ${__BUILD_STAMP__}）`);
 
 createApp(App).use(i18n).mount('#app');
 

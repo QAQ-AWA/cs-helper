@@ -13,6 +13,8 @@ const { state, formattedVersion, isBusy, checkManual, openDialog } = useUpdateCh
 // Tauri 的 getVersion 在某些环境下拿不到，回退到构建期注入的版本，
 // 免得「版本」那一行只剩一个空白。
 const versionText = computed(() => formattedVersion.value || __APP_VERSION__);
+// 模板里取不到全局常量，先落到 setup 作用域。
+const buildStamp = __BUILD_STAMP__;
 
 const repoUrl = 'https://github.com/QAQ-AWA/cs-helper';
 const repoIssuesUrl = `${repoUrl}/issues`;
@@ -51,6 +53,8 @@ function openIssues() {
           <span class="text-[13px] font-semibold tabular-nums text-fg">{{ versionText }}</span>
           <UpdateBadge v-if="state.hasUpdate" @click="openDialog" />
         </div>
+        <!-- 版本号常年不变，装的是哪次构建只能看这里。 -->
+        <p class="mt-0.5 text-[11px] tabular-nums text-fg-muted">{{ l('构建', 'Build') }} {{ buildStamp }}</p>
         <button
           v-if="!state.hasUpdate"
           type="button"
