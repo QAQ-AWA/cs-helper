@@ -18,7 +18,7 @@ from concurrent.futures import (
     ThreadPoolExecutor,
     wait,
 )
-from queue import Queue
+from queue import Empty, Queue
 import api_client, config, parse, combat, player_json
 
 log = logging.getLogger("pipeline")
@@ -704,6 +704,41 @@ def _validated_player_hint(username, hint):
     return {"username": name, "domain": domain, "steamid": steamid}
 
 
+def _run_download_workers(items, handler, workers, cancel_event=None):
+    """按 worker 数并发跑 ``handler``，取消时立刻收工。
+
+    下载是纯网络等待（单个 demo 200-400MB），串行跑五个玩家要十几分钟，
+    用户看到的就是「轨迹一直不出来」。解析仍在调用方单线程里按顺序做。
+    用 threading.Thread 而不是线程池：测试会把 Thread 换成同步实现。
+    """
+
+    jobs: Queue = Queue()
+    for item in items:
+        jobs.put(item)
+
+    def worker():
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            try:
+                item = jobs.get_nowait()
+            except Empty:
+                return
+            try:
+                handler(item)
+            except AnalysisCancelled:
+                return
+
+    threads = [
+        threading.Thread(target=worker, daemon=True)
+        for _ in range(max(1, workers))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+
 def _run_normal(
     usernames, map_name, max_demos=10, progress_cb=None, result_cb=None,
     player_hints=None, cancel_event=None,
@@ -829,20 +864,25 @@ def _run_normal(
         else:
             dl_queue.put({"type":"player_done","i":i,**base})
 
-    def _download_stage():
+    def _download_one(item):
+        i, username = item
         try:
-            for i, username in enumerate(usernames):
-                try:
-                    _raise_if_cancelled(cancel_event)
-                    _download_player(i, username)
-                except AnalysisCancelled:
-                    break
-                except Exception as e:
-                    log.exception("Unexpected download-stage error for %s", username)
-                    detail = str(e) or type(e).__name__
-                    dl_queue.put({"type":"player_failed","i":i,
-                                  "username":username,
-                                  "reason":f"处理玩家失败：{detail}"})
+            _download_player(i, username)
+        except AnalysisCancelled:
+            raise
+        except Exception as e:
+            log.exception("Unexpected download-stage error for %s", username)
+            detail = str(e) or type(e).__name__
+            dl_queue.put({"type":"player_failed","i":i,
+                          "username":username,
+                          "reason":f"处理玩家失败：{detail}"})
+
+    def _download_stage():
+        workers = max(1, min(config.NORMAL_DOWNLOAD_WORKERS, max(1, total)))
+        try:
+            _run_download_workers(
+                list(enumerate(usernames)), _download_one, workers, cancel_event
+            )
         finally:
             dl_queue.put(None)
 
@@ -868,7 +908,9 @@ def _run_normal(
             demf[i].append(item["dem_file"])
             cb(4, f"解析 demo {len(demf[i])}...")
             try:
-                records = parse.parse_demo(item["dem_file"], item["steamid"])
+                records = parse.parse_demo(
+                    item["dem_file"], item["steamid"], item.get("username")
+                )
                 # 每个回合都记下它来自哪一场：不同场次的 round_id 都从 0 开始，
                 # 服务端按回合去重时必须带上 match_code，否则五个人五场会被压成一场。
                 for record in records or []:

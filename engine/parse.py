@@ -407,14 +407,61 @@ def parse_demo_with_context(path, target_steamid):
     return out, p, evts, classified
 
 
-def parse_demo(path, target_steamid):
-    """Full single-demo parse: returns merged per-round dicts with path+grenades."""
+def resolve_steamid_by_name(path, nickname):
+    """按昵称在录像里找真实 steamId。
+
+    5E 的 demo 列表偶尔给出与录像内容不一致的 steamId（改名 / 换号），
+    拿那个 id 去解析会得到 0 回合——真机上「KILLER8号」就是这么丢的。
+    """
+
+    name = (nickname or "").strip()
+    if not name:
+        return None
+    try:
+        from demoparser2 import DemoParser
+
+        info = DemoParser(path).parse_player_info()
+    except Exception as exc:  # noqa: BLE001 - 找不到就当没有
+        log.debug("player_info unavailable for %s: %s", path, exc)
+        return None
+    if info is None or not hasattr(info, "columns") or "name" not in info.columns:
+        return None
+    if "steamid" not in info.columns:
+        return None
+    for _, row in info.iterrows():
+        if str(row.get("name") or "").strip() == name:
+            steamid = str(row.get("steamid") or "").strip()
+            if steamid:
+                return steamid
+    return None
+
+
+def parse_demo(path, target_steamid, nickname=None):
+    """Full single-demo parse: returns merged per-round dicts with path+grenades.
+
+    传了 ``nickname`` 时，如果按给定 steamId 解析出 0 回合，会按昵称在录像里
+    重新认一次人再解析——5E 的 demo 列表不保证 steamId 和录像内容一致。
+    """
     try:
         records, _parser, _events, _classified = parse_demo_with_context(
             path, target_steamid
         )
-        return records
     except Exception as exc:
         # A single malformed demo must not abort the pipeline for every player.
         log.warning("parse_demo failed %s: %s", path, exc)
         return []
+    if records or not nickname:
+        return records
+    alt = resolve_steamid_by_name(path, nickname)
+    if not alt or alt == str(target_steamid):
+        return records
+    log.warning(
+        "steamid mismatch for %s in %s: given %s, demo says %s — retrying",
+        nickname, os.path.basename(path), target_steamid, alt,
+    )
+    try:
+        records, _parser, _events, _classified = parse_demo_with_context(path, alt)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("parse_demo retry failed %s: %s", path, exc)
+        return []
+    return records

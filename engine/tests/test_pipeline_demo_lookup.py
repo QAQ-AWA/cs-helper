@@ -7,11 +7,16 @@ import pipeline
 
 
 class ImmediateThread:
-    def __init__(self, target, daemon=None):
+    """下载阶段现在会起多个线程并 join；这里同步执行，断言才能立刻看到结果。"""
+
+    def __init__(self, target, daemon=None, **kwargs):
         self.target = target
 
     def start(self):
         self.target()
+
+    def join(self, timeout=None):
+        return None
 
 
 def test_demo_lookup_failure_has_explicit_reason(tmp_path, monkeypatch):
@@ -113,7 +118,7 @@ def test_success_uses_domain_for_steamid_defaults_combat_and_calls_result_cb(
     monkeypatch.setattr(
         pipeline.parse,
         "parse_demo",
-        lambda path, steamid: [{
+        lambda path, steamid, nickname=None: [{
             "official_num": 1,
             "side": "CT",
             "rtype": "Buy",
@@ -222,7 +227,7 @@ def test_unexpected_parse_and_combat_errors_are_isolated(
         ],
     )
 
-    def fake_parse(path, steamid):
+    def fake_parse(path, steamid, nickname=None):
         if path.endswith("g161-bad.dem"):
             raise RuntimeError("unexpected parser failure")
         return [{

@@ -117,6 +117,11 @@ _CPU_COUNT = max(1, os.cpu_count() or 1)
 FAST_DOWNLOAD_WORKERS = _worker_count(
     "CS_SCOUT_FAST_DOWNLOAD_WORKERS", max(6, min(12, _CPU_COUNT * 2)), 32
 )
+# 常规管线：每个 demo 200-400MB，串行下载要十几分钟。下载是纯 I/O 等待，
+# 并发几路不影响解析（解析仍在单线程里按顺序做）。
+NORMAL_DOWNLOAD_WORKERS = _worker_count(
+    "CS_SCOUT_NORMAL_DOWNLOAD_WORKERS", 3, 6
+)
 _DEFAULT_FAST_PARSE_WORKERS = 1 if _CPU_COUNT <= 2 else 2
 FAST_PARSE_WORKERS = _worker_count(
     "CS_SCOUT_FAST_PARSE_WORKERS", _DEFAULT_FAST_PARSE_WORKERS, 16
