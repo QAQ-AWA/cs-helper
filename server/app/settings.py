@@ -47,6 +47,10 @@ SINGLE_ROOM_CODE = (os.getenv("CS_HELPER_SINGLE_ROOM_CODE") or "MAIN").strip().u
 AI_BASE_URL = os.getenv("CS_HELPER_AI_BASE_URL", "https://api.deepseek.com/v1")
 AI_MODEL = os.getenv("CS_HELPER_AI_MODEL", "deepseek-chat")
 AI_KEY = (os.getenv("CS_HELPER_AI_KEY") or "").strip()
+
+# 上报密钥：设置后，只有带着这个密钥的客户端才能往房间里写对局数据。
+# 手机端只读、不需要它；桌面端在「小队协同」里填。留空表示不校验（局域网自用）。
+REPORT_KEY = (os.getenv("CS_HELPER_REPORT_KEY") or "").strip()
 AI_TIMEOUT = _int_env("CS_HELPER_AI_TIMEOUT", 90, 5, 300)
 # Reasoning models spend this budget on the hidden scratchpad first; too small a
 # value returns an empty answer. 3000 leaves room for ~500 chars of visible text.

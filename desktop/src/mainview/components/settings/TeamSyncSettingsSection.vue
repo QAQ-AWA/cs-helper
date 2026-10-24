@@ -13,6 +13,8 @@ const serverUrlInput = ref(settings.value.serverUrl);
 const nicknameInput = ref(settings.value.nickname);
 const autoReportInput = ref(settings.value.autoReport);
 const roomCodeInput = ref('');
+const reportKeyInput = ref(settings.value.reportKey ?? '');
+const reportKeyRequired = ref(false);
 const serverLanIp = ref('');
 const linkCopied = ref(false);
 const busy = ref(false);
@@ -54,6 +56,13 @@ watch(
     } catch {
       // 局域网信息只是锦上添花
     }
+    try {
+      const cfg = await fetch(`${serverUrlInput.value.trim().replace(/\/+$/, '')}/api/v1/config`);
+      const json = await cfg.json();
+      if (json.code === 0) reportKeyRequired.value = json.data?.reportKeyRequired === true;
+    } catch {
+      // 拿不到就按「不需要」处理，填不填都不影响上报
+    }
   },
   { immediate: true },
 );
@@ -63,6 +72,7 @@ function savePreferences() {
     serverUrl: serverUrlInput.value.trim(),
     nickname: nicknameInput.value.trim(),
     autoReport: autoReportInput.value,
+    reportKey: reportKeyInput.value.trim(),
   });
 }
 
@@ -219,6 +229,25 @@ function handleCopy() {
           class="mt-1.5 w-full rounded-md border border-border bg-elevated px-3 py-2 text-xs focus:border-accent focus:outline-none"
           placeholder="房主"
         />
+      </label>
+
+      <label class="block text-xs">
+        <span class="font-medium text-fg">
+          上报密钥
+          <span v-if="reportKeyRequired" class="ml-1 rounded bg-warning/15 px-1 py-0.5 text-[10px] text-warning">
+            服务端要求
+          </span>
+        </span>
+        <input
+          v-model="reportKeyInput"
+          type="password"
+          autocomplete="off"
+          class="mt-1.5 w-full rounded-md border border-border bg-elevated px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+          placeholder="服务端没设就留空"
+        />
+        <p class="mt-1 text-[11px] text-fg-muted">
+          服务端设了 <code>CS_HELPER_REPORT_KEY</code> 时必须填一致，否则上报会被拒绝（手机端只看不传，不需要它）。
+        </p>
       </label>
 
       <div class="flex items-center justify-between">

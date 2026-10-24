@@ -234,6 +234,8 @@ export class TeamSyncClient {
             'Idempotency-Key': built.idempotencyKey,
             'X-Client-Version': CLIENT_VERSION,
             'X-Protocol-Version': String(PROTOCOL_VERSION),
+            // 服务端设了上报密钥时，没有这个头会被 403
+            ...(this.settings.reportKey ? { 'X-CS-Report-Key': this.settings.reportKey } : {}),
           },
           body: JSON.stringify(built.body),
         },

@@ -78,3 +78,49 @@ def test_multi_mode_still_requires_a_code():
         response = client.post("/api/v1/room/join", json={"nickname": "x"})
         assert response.status_code == 400
         assert response.json()["code"] == 1002
+
+
+def test_report_requires_the_key_when_configured(monkeypatch):
+    """设了上报密钥就只认带密钥的客户端——房间码管看，密钥管写。"""
+
+    from app import settings as app_settings
+
+    app_settings.REPORT_KEY = "s3cret"
+    try:
+        app = create_app(secret="test-secret", demo_runner=None, room_mode="single")
+        with TestClient(app) as client:
+            token = client.post(
+                "/api/v1/room/join",
+                json={"roomCode": "MAIN", "nickname": "房主", "deviceType": "pc"},
+            ).json()["data"]["token"]
+            headers = {"Authorization": f"Bearer {token}"}
+            body = {
+                "protocolVersion": 1,
+                "clientVersion": "test",
+                "platform": "5e",
+                "matchId": "g161-key-test",
+                "mapName": "de_dust2",
+                "phase": "ready",
+                "teams": {"ct": [], "t": []},
+            }
+
+            missing = client.post("/api/v1/match/report?roomCode=MAIN", json=body, headers=headers)
+            assert missing.status_code == 403
+            assert missing.json()["code"] == 1005
+
+            wrong = client.post(
+                "/api/v1/match/report?roomCode=MAIN",
+                json=body,
+                headers={**headers, "X-CS-Report-Key": "nope"},
+            )
+            assert wrong.status_code == 403
+
+            ok = client.post(
+                "/api/v1/match/report?roomCode=MAIN",
+                json=body,
+                headers={**headers, "X-CS-Report-Key": "s3cret"},
+            )
+            assert ok.status_code == 200
+            assert ok.json()["data"]["matchId"] == "g161-key-test"
+    finally:
+        app_settings.REPORT_KEY = ""

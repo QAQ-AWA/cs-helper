@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -239,6 +240,8 @@ def create_app(
                 "protocolVersion": events.PROTOCOL_VERSION,
                 "demoEnabled": demo_runner is not None,
                 "aiEnabled": ai_client is not None,
+                # 只告诉客户端「要不要填」，密钥本身永远不下发
+                "reportKeyRequired": bool(settings.REPORT_KEY),
             }
         )
 
@@ -357,8 +360,15 @@ def create_app(
         roomCode: str = Query(..., min_length=4, max_length=12),
         authorization: str | None = Header(default=None),
         idempotency_key: str | None = Header(default=None),
+        report_key: str | None = Header(default=None, alias="X-CS-Report-Key"),
     ):
         room, _member = require_room(authorization, roomCode)
+        # 房间码是「谁能看」，上报密钥是「谁能写」。设了密钥就只认带密钥的客户端，
+        # 免得拿到二维码的人往房间里灌对局数据。
+        if settings.REPORT_KEY and not secrets.compare_digest(
+            report_key or "", settings.REPORT_KEY
+        ):
+            raise ApiError("上报密钥不正确", code=1005, status=403)
         if payload.protocolVersion > events.PROTOCOL_VERSION:
             raise ApiError("客户端协议版本高于服务端，请升级服务端", code=1006, status=409)
         session, created = hub.report_match(room, payload.model_dump())

@@ -7,6 +7,8 @@ export interface SyncSettings {
   token: string;
   nickname: string;
   autoReport: boolean;
+  /** 上报密钥：服务端设了 CS_HELPER_REPORT_KEY 时必填，否则上报会被 403。 */
+  reportKey: string;
 }
 
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
@@ -17,4 +19,5 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   token: '',
   nickname: 'PC 房主',
   autoReport: true,
+  reportKey: '',
 };
