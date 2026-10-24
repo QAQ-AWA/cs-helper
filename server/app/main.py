@@ -234,7 +234,8 @@ def create_app(
         return ok(
             {
                 "mode": hub.room_mode,
-                "roomCode": hub.single_room_code if hub.is_single_room else None,
+                # 单房间模式下**不**回房间码：服务端放到公网后这个接口谁都能访问，
+                # 回房间码等于把门牌号贴在门外。房间码只从二维码链接的 ?room= 传进来。
                 "protocolVersion": events.PROTOCOL_VERSION,
                 "demoEnabled": demo_runner is not None,
                 "aiEnabled": ai_client is not None,

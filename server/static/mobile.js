@@ -972,10 +972,8 @@ async function boot() {
     const json = await res.json();
     if (json.code === 0 && json.data) {
       roomMode = json.data.mode || 'multi';
-      if (!roomCode && json.data.roomCode) {
-        roomCode = json.data.roomCode;
-        $('code').textContent = roomCode;
-      }
+      // 房间码不再由服务端下发（公网部署时那等于把门牌号贴在门外），
+      // 只认链接里的 ?room=，也就是电脑端二维码带的那个。
       if (roomMode === 'single') {
         $('join-hint').textContent = '当前为单房间模式，输入昵称即可进入。';
       }
