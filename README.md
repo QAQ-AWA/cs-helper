@@ -130,7 +130,7 @@ python tools/smoke_e2e.py                    # 端到端冒烟（先起 8787）
 | 服务端 | `cd server && pytest tests -q` | **159 passed** |
 | 引擎 | `cd engine && pytest tests -q` | **119 passed, 10 skipped**（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | **246 passed** |
-| Android | `flutter analyze && flutter test` | 0 issue · 22 passed |
+| Android | `flutter analyze && flutter test` | 0 issue · 17 passed |
 | 界面 | `npx playwright test`（本地 UI 验收） | 20 张截图 |
 
 ## 文档
