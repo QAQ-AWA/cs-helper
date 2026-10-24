@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Route } from 'lucide-vue-next';
 import { teamSyncClient } from '@core/sync/sync-client';
 import { ReplayPlayer } from '@shared/replay-core.js';
+import { resolveRadarUrl } from '../utils/resolve-radar-url';
 
 interface PathPlayer {
   steamId: string;
@@ -103,7 +104,9 @@ async function openPlayer(player: PathPlayer) {
     teardown();
     const replay = detail.replay || {};
     renderer = new ReplayPlayer(canvas, {
-      radar: replay.radar,
+      // 产物里是 /maps/<map>/radar.png 这种服务端相对路径，桌面端页面
+      // 来自 tauri://localhost，必须补上服务端地址，否则画布只有「缺少雷达图资源」。
+      radar: resolveRadarUrl(replay.radar, baseUrl),
       transform: replay.transform,
       rounds: replay.rounds || [],
       autoplay: true,

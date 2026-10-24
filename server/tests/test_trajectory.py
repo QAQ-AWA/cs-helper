@@ -132,3 +132,56 @@ def test_team_plant_totals_are_deduplicated_by_round():
     assert profile["teamPlants"]["B"] == 1
     assert profile["teamPlants"]["A"] == 1
     assert profile["teamPlants"]["avgT"] == 42.0
+
+
+def _t_round(round_id, path, plant=None, match_code="m1"):
+    item = {"side": "T", "round_id": round_id, "path": path, "match_code": match_code}
+    if plant:
+        item["plant"] = plant
+    return item
+
+
+def test_team_approach_reads_direction_from_movement():
+    """20 秒窗口里看不到落包，但看得到朝哪个包点压。"""
+    to_a = _path((0, 0, 0), (20, 900, 900))
+    to_b = _path((0, 0, 0), (20, -900, -900))
+    rounds = [
+        # 两发下包先把 A/B 的锚点立起来
+        _t_round(1, to_a, {"site": "A", "x": 1000, "y": 1000, "t": 45.0}),
+        _t_round(2, to_b, {"site": "B", "x": -1000, "y": -1000, "t": 40.0}),
+        _t_round(3, to_a),
+        _t_round(4, to_a),
+        _t_round(5, to_b),
+    ]
+    profile = build_profile("de_dust2", [_player("p", rounds)])
+
+    assert profile["teamApproach"]["rounds"] == 5
+    assert profile["teamApproach"]["A"] == 3
+    assert profile["teamApproach"]["B"] == 2
+    assert profile["players"][0]["t"]["approach"] == {"A": 3, "B": 2}
+
+
+def test_approach_ignores_players_who_stay_put():
+    still = _path((0, 0, 0), (20, 20, 20))
+    rounds = [
+        _t_round(1, still, {"site": "A", "x": 1000, "y": 1000, "t": 45.0}),
+        _t_round(2, still, {"site": "B", "x": -1000, "y": -1000, "t": 40.0}),
+    ]
+    profile = build_profile("de_dust2", [_player("p", rounds)])
+
+    assert profile["teamApproach"]["rounds"] == 0
+    assert profile["players"][0]["t"]["approach"] == {}
+
+
+def test_same_round_number_in_two_matches_is_not_collapsed():
+    """五个人五场，round_id 都从 0 开始；按回合去重必须带 match_code。"""
+    to_a = _path((0, 0, 0), (20, 900, 900))
+    players = [
+        _player("p1", [_t_round(0, to_a, {"site": "A", "x": 1000, "y": 1000, "t": 45.0}, "m1")]),
+        _player("p2", [_t_round(0, to_a, {"site": "A", "x": 1000, "y": 1000, "t": 45.0}, "m2")]),
+    ]
+    profile = build_profile("de_dust2", players)
+
+    assert profile["teamPlants"]["rounds"] == 2
+    assert profile["teamPlants"]["A"] == 2
+    assert profile["teamApproach"]["rounds"] == 2

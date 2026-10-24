@@ -820,7 +820,8 @@ def _run_normal(
             cb(3, f"下载 demo {mi+1}/{len(demos)}...")
             for f in download_and_extract(m["match_code"], m["demo_url"], opp_dir):
                 _raise_if_cancelled(cancel_event)
-                dl_queue.put({"type":"demo","i":i,**base,"dem_file":f,"dem_idx":dem_idx})
+                dl_queue.put({"type":"demo","i":i,**base,"dem_file":f,"dem_idx":dem_idx,
+                              "match_code":m["match_code"]})
                 dem_idx += 1
         if dem_idx == 0:
             dl_queue.put({"type":"player_failed","i":i,"username":name,
@@ -868,6 +869,10 @@ def _run_normal(
             cb(4, f"解析 demo {len(demf[i])}...")
             try:
                 records = parse.parse_demo(item["dem_file"], item["steamid"])
+                # 每个回合都记下它来自哪一场：不同场次的 round_id 都从 0 开始，
+                # 服务端按回合去重时必须带上 match_code，否则五个人五场会被压成一场。
+                for record in records or []:
+                    record["match_code"] = item.get("match_code")
                 records = assemble_round_offset(records or [], item["dem_idx"])
             except Exception:
                 log.exception("Demo parse failed unexpectedly: %s", item["dem_file"])

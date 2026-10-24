@@ -16,6 +16,8 @@ def build(username, domain, steamid, map_name, rounds, combat):
             # Bomb site truth for the round (A/B + plant position), when it was
             # planted. Opening-position analysis needs this to name sites.
             "plant": r.get("plant"),
+            # 回合所属的 5E 场次：服务端按 (match_code, round_id) 去重。
+            "match_code": r.get("match_code"),
         })
     return {
         "username": username, "domain": domain, "steamid": str(steamid),

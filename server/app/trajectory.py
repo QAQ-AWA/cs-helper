@@ -34,6 +34,13 @@ SETUP_T = 8.0
 SITE_RADIUS = 600.0
 # How many samples per site we keep for the anchor median.
 ANCHOR_SAMPLES = 240
+# 20 秒窗口里还看不到落包（mirage 落包在 30-40s），但看得到「往哪边走」：
+# 比较起点与窗口结束时到两个包点的距离，谁缩短得多就是朝谁去。
+APPROACH_WINDOW = 20.0
+# 少于这个缩短量等于原地控图，不投票（CS 单位，约 3 米）。
+APPROACH_MIN = 150.0
+# 两边都在靠近（例如先抢中路）时，差距不够就不下结论。
+APPROACH_LEAD = 75.0
 
 
 def anchor_path() -> Path:
@@ -130,6 +137,51 @@ def zone_of(
     return best_site or "unknown"
 
 
+def _round_key(item: dict[str, Any]) -> str | None:
+    """Identify one round across every player's copy of the same demo.
+
+    Round ids restart at 0 in every demo, so five opponents from five different
+    matches would otherwise collapse into one match worth of rounds. ``match_code``
+    is stamped by the engine; without it we fall back to the old behaviour.
+    """
+
+    round_id = item.get("round_id")
+    if round_id is None:
+        return None
+    match_code = str(item.get("match_code") or "")
+    return f"{match_code}:{round_id}" if match_code else f"?:{round_id}"
+
+
+def _approach(path: list[list[float]], anchors: dict[str, list[float]]) -> str | None:
+    """Which site the player is closing on inside the opening window.
+
+    Plants are the ground truth but they land after the window on most maps, so
+    direction has to come from movement. Returns ``None`` when the path stays put
+    or heads somewhere between the two sites — a wrong guess is worse than none.
+    """
+
+    if not anchors or len(path) < 2:
+        return None
+    start = sample_at(path, path[0][0])
+    end = sample_at(path, APPROACH_WINDOW)
+    if start is None or end is None:
+        return None
+    closing: dict[str, float] = {}
+    for site, (ax, ay) in anchors.items():
+        before = ((start[0] - ax) ** 2 + (start[1] - ay) ** 2) ** 0.5
+        after = ((end[0] - ax) ** 2 + (end[1] - ay) ** 2) ** 0.5
+        closing[site] = before - after
+    if not closing:
+        return None
+    best = max(closing, key=closing.get)
+    if closing[best] < APPROACH_MIN:
+        return None
+    rest = [value for site, value in closing.items() if site != best]
+    if rest and closing[best] - max(rest) < APPROACH_LEAD:
+        return None
+    return best
+
+
 def _tally(zones: Iterable[str], fallback: str) -> dict[str, int]:
     """Count A/B, plus a bucket for anything that is not a site."""
 
@@ -151,6 +203,7 @@ def _player_profile(player: dict[str, Any], anchors: dict[str, list[float]]) -> 
     planted: list[str] = []
     plant_times: list[float] = []
     t_rounds = 0
+    approaches: list[str] = []
     early_utility: dict[str, int] = {}
     opening_deaths = 0
 
@@ -162,6 +215,9 @@ def _player_profile(player: dict[str, Any], anchors: dict[str, list[float]]) -> 
             ct_zones.append(zone_of(sample_at(path, SETUP_T), anchors))
         elif side == "T":
             t_rounds += 1
+            direction = _approach(path, anchors)
+            if direction:
+                approaches.append(direction)
             plant = item.get("plant") or {}
             site = plant.get("site")
             # A 20s window cannot see a Mirage execute (plants land at 30-40s),
@@ -189,6 +245,8 @@ def _player_profile(player: dict[str, Any], anchors: dict[str, list[float]]) -> 
             # Rounds where the T side died before planting — not a site choice.
             "noPlant": t_rounds - len(planted),
             "avgPlantT": round(statistics.mean(plant_times), 1) if plant_times else None,
+            # 前 20 秒朝哪个包点走（不等于最后落哪个点，打默认时会分开）。
+            "approach": _tally(approaches, "even"),
         },
         "openingDeaths": opening_deaths,
         "earlyUtility": early_utility,
@@ -215,13 +273,26 @@ def build_profile(
 
     # 同一个下包会出现在每个被解析选手的回合里，横向相加会重复计数；
     # 队伍级的次数必须按 round_id 去重后再统计。
-    team_plants: dict[int, dict[str, Any]] = {}
+    team_plants: dict[str, dict[str, Any]] = {}
+    team_routes: dict[str, dict[str, int]] = {}
     for player in players:
         for item in (player.get("replay") or {}).get("rounds") or []:
+            key = _round_key(item)
+            if key is None:
+                continue
             plant = item.get("plant") or {}
-            round_id = item.get("round_id")
-            if plant.get("site") in {"A", "B"} and round_id is not None:
-                team_plants.setdefault(int(round_id), plant)
+            if plant.get("site") in {"A", "B"}:
+                team_plants.setdefault(key, plant)
+            if item.get("side") != "T":
+                continue
+            direction = _approach(item.get("path") or [], anchors)
+            if direction is None:
+                continue
+            votes = team_routes.setdefault(key, {"A": 0, "B": 0})
+            votes[direction] += 1
+
+    approach_a = sum(1 for votes in team_routes.values() if votes["A"] > votes["B"])
+    approach_b = sum(1 for votes in team_routes.values() if votes["B"] > votes["A"])
 
     sites = [plant.get("site") for plant in team_plants.values()]
     times = [
@@ -238,6 +309,17 @@ def build_profile(
             "A": sites.count("A"),
             "B": sites.count("B"),
             "avgT": round(statistics.mean(times), 1) if times else None,
+        },
+        # 没有落包数据时的替代信号：前 20 秒往哪边压。按回合取多数票，
+        # 所以一个回合里五个人分头走也会被算成 even 而不是硬塞一边。
+        "teamApproach": {
+            "rounds": len(team_routes),
+            "A": approach_a,
+            "B": approach_b,
+            "even": len(team_routes) - approach_a - approach_b,
+            "playersA": sum(votes["A"] for votes in team_routes.values()),
+            "playersB": sum(votes["B"] for votes in team_routes.values()),
+            "windowSeconds": int(APPROACH_WINDOW),
         },
         "players": profiles,
         "siteAnchors": anchors or None,
