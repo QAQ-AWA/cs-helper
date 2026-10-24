@@ -1,6 +1,8 @@
-# 给手机端（Flutter）的提示词
+# 走位解读 · 客户端接入规范
 
-下面整段可以直接粘给写 Flutter 的 agent，服务端已经上线，它只需要做客户端。
+> 服务端 `PATHS_REPORT_READY` 的字段说明与 UI 要求。
+> **Web（`server/static/`）和 Android（`cs-helper-android`）都已按这份实现**，
+> 留着是为了以后加新客户端时不用重新推导。
 
 ---
 

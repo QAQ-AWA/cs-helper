@@ -1,140 +1,156 @@
 # CS Helper · 对局情报系统
 
-CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云端聚合解析 → 队友手机查看**。
+[![Build Desktop](https://github.com/QAQ-AWA/cs-helper-exe/actions/workflows/build-desktop.yml/badge.svg)](https://github.com/QAQ-AWA/cs-helper-exe/actions/workflows/build-desktop.yml)
+[![Build Android](https://github.com/QAQ-AWA/cs-helper-android/actions/workflows/build.yml/badge.svg)](https://github.com/QAQ-AWA/cs-helper-android/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-本仓库是完整项目，三端都在里面；桌面模块也可脱离云端单独运行。
+CS2 车队用的**赛前情报**系统：电脑端侦测到对局 → 服务端拉取并解析对手历史 Demo →
+队友手机上看阵容画像、开局轨迹和 AI 战术建议。
 
-## 目录
+> **只做赛前历史数据**：不读游戏内存、不注入进程、不提供局内实时敌人位置。
 
-| 目录 | 内容 | 技术栈 | 状态 |
-| --- | --- | --- | --- |
-| [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报、习惯轨迹 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（286 tests） |
-| [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发、历史落盘与房间回收、开局预判 | FastAPI · WebSocket | ✅ 可用（123 tests） |
-| [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
-| [`mobile/`](https://github.com/QAQ-AWA/cs-helper-android) | **原生 Android 客户端**（独立仓库）：同一套房间 / 分析 / 轨迹 / 赛后，Flutter 实现 | Flutter · Dart | ✅ 可用（22 tests） |
-| [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（111 tests） |
-| [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
-| [`tools/`](tools/) | 端到端冒烟脚本 | Python | ✅ |
-| [`docs/`](docs/) | 架构与路线图 | Markdown | ✅ |
+<p align="center">
+  <img src="docs/images/desktop-analysis.png" width="660" alt="桌面端 · AI 分析" />
+</p>
 
-> `desktop/` 来自原来的独立桌面项目 [cs-helper-exe](https://github.com/QAQ-AWA/cs-helper-exe)。
-> 那个仓库是**上一代单独发布的桌面版**，可以独立安装使用；本仓库里的 `desktop/` 是纳入统一架构后继续演进的版本，两者不要混为一谈。
+<p align="center">
+  <img src="docs/images/mobile-roster.png" width="210" alt="手机 · 阵容" />
+  <img src="docs/images/mobile-analysis.png" width="210" alt="手机 · 分析" />
+  <img src="docs/images/mobile-paths.png" width="210" alt="手机 · 轨迹与走位解读" />
+</p>
+
+## 能做什么
+
+| 能力 | 说明 |
+| --- | --- |
+| **阵容画像** | 十个人的赛季 Rating / ADR / RWS / K/D / 爆头率 / 近 5 场，5E 数据缺失时用本场数据兜底并明说 |
+| **对手开局轨迹** | 每人最近一场 Demo 的前 20 秒路径，雷达图回放，1x/2x/4x、按阵营筛选 |
+| **AI 实力分析** | 结构化结论：胜率条、决定本局的因素、玩家信号、双方取胜路径、数据边界 |
+| **AI 走位解读** | 每个人「实际怎么走 / 开局大概率在哪 / 怎么针对」+ 整队对策，直接挂在轨迹页 |
+| **赛后复盘** | 比分、半场、双方 K/D/A 与 Rating、MVP/SVP，以及 AI 预判是否命中 |
+| **多端同步** | 服务端是唯一权威，电脑和手机看到的永远是同一份状态 |
+
+## 四个仓库
+
+| 仓库 | 角色 |
+| --- | --- |
+| [**cs-helper**](https://github.com/QAQ-AWA/cs-helper) | **主仓库**：桌面端、服务端、解析引擎、契约、文档都在这里 |
+| [**cs-helper-exe**](https://github.com/QAQ-AWA/cs-helper-exe) | **构建 + 发布**：同一份代码，Actions 在这里跑，安装包发到 `latest-build` |
+| [**cs-test**](https://github.com/QAQ-AWA/cs-test) | **镜像**：同一份代码，构建只跑测试和产物，不发 Release |
+| [**cs-helper-android**](https://github.com/QAQ-AWA/cs-helper-android) | **Android 客户端**：Flutter 实现，独立维护、独立发 APK |
+
+三个 `cs-helper*` 仓库是同一份 `main` 的镜像，区别只在 CI 行为：
+
+```bash
+git push              # → cs-test（镜像）
+git push helper main  # → cs-helper（主仓库）
+git push exe main     # → cs-helper-exe（触发构建 + 发布）
+```
 
 ## 架构
 
 ```
-┌── desktop/ ──────────────────────────────────────────────┐
-│ 5E CDP 侦测 · 完美世界日志解密 · 就绪倒计时 · 本地展示      │
-│ 只上报「看到了什么」，不上报结论                            │
-└──────────────┬───────────────────────────────────────────┘
-               │ HTTPS 上报（幂等键 platform:matchId）· WSS 订阅
-┌──────────────▼──── server/ ──────────────────────────────┐
-│ 房间中心 · 任务编排（按 matchId 去重）· 分发（事件+大对象）  │
-│ 计算：engine/ 解析 Demo（异步）· AI 编排（可选）              │
-└──────────────┬───────────────────────────────────────────┘
-               │ WSS
-        📱 队友手机（PWA / 原生 Android ✅）：房间 · 阵容 · 轨迹回放 · AI
+┌── desktop/ ─────────────────────────────────────────────────┐
+│ Tauri v2 · Rust · Vue 3                                     │
+│ 5E CDP 侦测 · 完美世界日志解析 · 就绪倒计时 · 本地展示        │
+│ 只上报「看到了什么」，不下结论                                │
+└───────────────┬─────────────────────────────────────────────┘
+                │  HTTP 上报（幂等键 platform:matchId）· WS 订阅
+┌───────────────▼── server/ ──────────────────────────────────┐
+│ FastAPI · WebSocket                                         │
+│ 房间中心 · 任务编排（按 matchId 去重）· 事件分发              │
+│ 计算：engine/ 解析 Demo（异步子进程）· AI 编排（可选）        │
+└───────────────┬─────────────────────────────────────────────┘
+                │  WS
+   📱 手机（PWA / 原生 Android）：阵容 · 轨迹 · AI · 赛后
 ```
 
-服务端是房间状态的唯一权威，PC 与手机看到的内容始终一致。
-完整取舍见 [docs/architecture.md](docs/architecture.md)。
+服务端可以跑在本机，也可以部署到公网服务器让队友远程接入——
+见 [docs/DEPLOY.md](docs/DEPLOY.md)（甲骨文 A1 / ARM64 实测通过）。
 
 ## 快速开始
 
-### 服务端
+### A. 只想用
+
+1. 下载桌面端：<https://github.com/QAQ-AWA/cs-helper-exe/releases/tag/latest-build>
+2. 下载手机端：<https://github.com/QAQ-AWA/cs-helper-android/releases>
+3. 桌面端「设置 → 小队协同」填服务端地址和房间码，用二维码让队友扫码
+
+### B. 自己跑服务端
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate           # Linux/macOS: source .venv/bin/activate
+.venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
 pip install -r server/requirements.txt
+pip install -r engine/requirements.txt
 
 export CS_HELPER_SERVER_SECRET='换成随机串'   # 不设则重启后 token 全部失效
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8787 --app-dir server
 ```
 
-- 手机/浏览器：`http://<局域网IP>:8787/`（默认单房间，只需输昵称；带 `?room=` 亦可）
-- 健康检查：`/healthz`
+- 健康检查 `/healthz`，手机打开 `http://<IP>:8787/?room=<房间码>`
+- 默认**单房间模式**（房间码就是门禁）；要多房间设 `CS_HELPER_ROOM_MODE=multi`
+- AI 分析需要 `CS_HELPER_AI_KEY`（任何 OpenAI 兼容端点）；不填则跳过 AI，其它功能照常
 
-默认是**单房间模式**，适合自用与固定车队。需要多房间码时设 `CS_HELPER_ROOM_MODE=multi`。
-
-### 桌面客户端
-
-```bash
-cd desktop
-npm ci
-npm run dev          # 开发
-npm run build:exe    # 出单文件 exe（src-tauri/target/release/）
-```
-
-在客户端的同步设置里把服务端地址填成 `http://<IP>:8787` 即可接入房间。
-
-### Android 客户端（Flutter）
-
-客户端独立维护在 <https://github.com/QAQ-AWA/cs-helper-android>：
+### C. 部署到服务器
 
 ```bash
-git clone https://github.com/QAQ-AWA/cs-helper-android
-cd cs-helper-android
-flutter pub get
-flutter run                  # 真机 / 模拟器
-flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
+bash deploy/preflight.sh    # 先自检：依赖轮子、5E 接口、demo CDN 实测速度
+sudo bash deploy/install.sh # 装成 systemd 服务，幂等可重复执行
 ```
 
-要求 Flutter 3.24+、JDK 17+、Android SDK 36。手机与电脑在同一 Wi-Fi，地址填
-`http://<电脑局域网IP>:8787`（不要填 `127.0.0.1`）。详见仓库内的 README。
+细节、风险与排障见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 
-预构建 APK 在 [Releases](https://github.com/QAQ-AWA/cs-helper-android/releases)（CI 自动出包）。
-
-### 构建与下载（无需本地 Rust）
-
-桌面端由 GitHub Actions 在 `windows-latest` 上构建：
-
-- 最新包：<https://github.com/QAQ-AWA/cs-helper-exe/releases/tag/latest-build>（每次 push `main` 自动更新）
-- 直链：<https://github.com/QAQ-AWA/cs-helper-exe/releases/download/latest-build/cs-match-helper.exe>
-- 打 `v*` tag 会生成正式 Release
-
-> 构建和发布都在 `cs-helper-exe` 里跑，用仓库自带的 `GITHUB_TOKEN` 即可，不需要额外配置。
-> `cs-test` 是同一份代码的镜像，那边的构建只产出 artifact、不发 Release，
-> 免得两个仓库各有一份 `latest-build`。
-
-工作流在 `.github/workflows/build-desktop.yml`：单元测试 → 前端构建 → `tauri build --no-bundle` → 上传产物。
-
-### 地图资源（回放必需）
+### D. 改代码
 
 ```bash
-cd engine && python import_radar.py --from-vpk "<CS2>/game" --png-dir <1024px 雷达图目录>
+cd desktop && npm ci && npm run dev          # 桌面端（Tauri + Vite）
+cd server  && pytest tests -q                # 服务端
+cd engine  && pytest tests -q                # 解析引擎
+python tools/smoke_e2e.py                    # 端到端冒烟（先起 8787）
 ```
 
-变换直接读 CS2 的 `pak01_dir.vpk`；`awpy get maps` 的 CDN 当前被 Cloudflare 拦截。详见 [engine/README.md](engine/README.md)。
+## 目录
 
-### 解析引擎（独立使用）
-
-```bash
-pip install -r engine/requirements.txt
-cd engine && python -m pytest tests -q
-```
+| 目录 | 内容 |
+| --- | --- |
+| [`desktop/`](desktop/) | 桌面客户端（Tauri v2 · Rust · Vue 3 · TS） |
+| [`server/`](server/) | 房间与分发服务（FastAPI · WebSocket） |
+| [`server/static/`](server/static/) | 手机端 PWA（原生 ESM · Canvas） |
+| [`engine/`](engine/) | Demo 检索、下载、解析（Python · demoparser2） |
+| [`contract/`](contract/) | 端云事件契约（与 `server/app/events.py` 互为镜像） |
+| [`deploy/`](deploy/) | 一键部署脚本、systemd 单元、Caddy 反代 |
+| [`tools/`](tools/) | 端到端冒烟脚本 |
+| [`docs/`](docs/) | 架构、部署、交接、历程 |
 
 ## 验证现状
 
 | 套件 | 命令 | 结果 |
 | --- | --- | --- |
-| 服务端 | `cd server && pytest tests -q` | 123 passed |
-| 引擎 | `cd engine && pytest tests -q` | 111 passed, 10 skipped（缺 328MB 集成样本） |
-| 桌面端 | `cd desktop && npm test` | 286 passed |
-| Android | `cd cs-helper-android && flutter analyze && flutter test` | 0 issue · 22 passed |
-| 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |
+| 服务端 | `cd server && pytest tests -q` | **159 passed** |
+| 引擎 | `cd engine && pytest tests -q` | **119 passed, 10 skipped**（缺 328MB 集成样本） |
+| 桌面端 | `cd desktop && npm test` | **246 passed** |
+| Android | `flutter analyze && flutter test` | 0 issue · 22 passed |
+| 界面 | `npx playwright test`（本地 UI 验收） | 20 张截图 |
 
-## 事件契约
+## 文档
 
-`{protocolVersion, seq, ts, action, payload}`，目录见 [`contract/events.json`](contract/events.json)，与 `server/app/events.py` 互为镜像，漂移时测试失败。
+| 文档 | 看它做什么 |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | 架构定位、拓扑、技术选型与取舍 |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | 部署到服务器：资源估算、风险、运维、排障 |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | 接手必读：现状、约定、踩坑清单、验收清单、待办 |
+| [docs/HISTORY.md](docs/HISTORY.md) | 每一轮改了什么、为什么、实测数据 |
+| [contract/events.json](contract/events.json) | 端云事件契约（漂移时测试失败） |
 
-## 许可证与致谢
+## 许可与致谢
 
 MIT，见 [LICENSE](LICENSE)；第三方依赖见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-- 桌面客户端衍生自 [qianjiachun/cs-match-helper](https://github.com/qianjiachun/cs-match-helper)，由 [QAQ-AWA](https://github.com/QAQ-AWA) 维护。
-- Demo 解析引擎来自 **CS-Scout 2.0**（EytleBB）。
+- 桌面客户端衍生自 [qianjiachun/cs-match-helper](https://github.com/qianjiachun/cs-match-helper)
+- Demo 解析引擎来自 **CS-Scout 2.0**（EytleBB）
+- 地图雷达图与变换来自 CS2 游戏文件
 
 ## 免责声明
 
-仅用于赛前情报与赛后复盘。**不读取游戏内存、不注入进程、不提供局内实时敌人位置**；请勿用于破坏平台公平性的用途。
+仅用于赛前情报与赛后复盘。请勿用于破坏平台公平性的用途。

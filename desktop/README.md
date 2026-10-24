@@ -1,3 +1,7 @@
+> **本目录是 CS Helper 的桌面端模块**，不是独立项目。
+> 整体说明、服务端与手机端见[仓库根 README](../README.md)；
+> 上游来源与改动范围见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+
 <div align="center">
 
 # 🎮 CS Match Helper
