@@ -513,6 +513,27 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 坑：`profile_state` 已经是 `ready` 时，`submit_profile` 会直接返回，链式的
 `profile → home → ai` 不会走，所以 `report_match` 必须显式补一次 `submit_ai`。
 
+## 网页端（手机）2026-10-24 改版
+
+和桌面端同一套界面：浅色卡片、四个页签（阵容/分析/轨迹/赛后）、分析页用结构化
+卡片渲染（胜率条 / 决定因素 / 玩家信号 / 双方取胜路径 / 数据边界）。
+
+### 「只有开无痕窗口才能看到数据」的三个原因
+
+| 层 | 问题 | 修法 |
+| --- | --- | --- |
+| HTTP | 外壳没有缓存头，浏览器缓存旧 HTML/JS | 中间件给 `/`、`/static/*`、`/sw.js`、manifest 加 `no-store` |
+| Service Worker | 旧版缓存优先，永久返回旧外壳 | `sw.js` 改成 kill switch（注销 + 清缓存 + 重载），页面启动也主动注销 |
+| 认证 | 旧 token 让 WS 握手直接 403，客户端只看到 1006 → 无限重连 | 启动先探活快照（401 就清 token 回登录）；连续两次连不上也清 token；加「退出房间」 |
+
+排查手法：Playwright 往 localStorage 塞一个假 token，刷新后必须看到登录弹层。
+这条用例现在固定在 `.tools/ui-check/tests/mobile-stale.spec.ts`。
+
+### 手机端的取舍
+
+阵容页不做八列表格（要横滑），改成两行卡片：第一行名字 + 信号标签 + Rating，
+第二行 ADR / RWS / K/D / 爆头 / 近 5 场。所有数字都在，不用横滑。
+
 ## 真实对局测试清单（首次验收）
 
 前置：**必须用 `7d1aded` 及之后的构建**（`a853bd9` 之前的 exe 没有服务端分析面板与同步设置）。
