@@ -9,7 +9,11 @@ CS2 开黑辅助：**PC 客户端**侦测对局并上报阵容 → **服务端**
 ## 仓库
 
 - 主仓库：`QAQ-AWA/cs-helper`（remote 名 `helper`），单一 main 分支
-- 构建仓库：`QAQ-AWA/cs-test`（remote 名 `test`），push 即触发 GitHub Actions 出 Windows exe 到 `latest-build` 预发布；打 `v*` tag 发正式版
+- 构建仓库：`QAQ-AWA/cs-test`（remote 名 `test`），push 即触发 GitHub Actions 出 Windows exe
+- 发布仓库：`QAQ-AWA/cs-helper-exe` —— 安装包统一发到这里的 `latest-build` 预发布（打 `v*` tag 发正式版）。
+  跨仓库发布用 `secrets.RELEASE_TOKEN`（对该仓库有 `contents: write` 的 PAT），
+  没配这个 secret 时构建会明确报错而不是静默失败
+- Flutter 客户端独立仓库维护，本地 `mobile/` 目录不入库（`.gitignore` 里已忽略）
 - 注意：本地 main 上游是 `test/main`，`git push` 默认推构建仓库；推主仓库要显式 `git push helper main`
 - 只读禁区：`I:\code项目\CS`（旧桌面项目）、`I:\code项目\demo`（engine 上游），不要改
 

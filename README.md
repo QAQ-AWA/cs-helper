@@ -86,9 +86,13 @@ flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
 
 桌面端由 GitHub Actions 在 `windows-latest` 上构建：
 
-- 最新包：<https://github.com/QAQ-AWA/cs-test/releases/tag/latest-build>（每次 push `main` 自动更新）
-- 直链：<https://github.com/QAQ-AWA/cs-test/releases/download/latest-build/cs-match-helper.exe>
+- 最新包：<https://github.com/QAQ-AWA/cs-helper-exe/releases/tag/latest-build>（每次 push `main` 自动更新）
+- 直链：<https://github.com/QAQ-AWA/cs-helper-exe/releases/download/latest-build/cs-match-helper.exe>
 - 打 `v*` tag 会生成正式 Release
+
+> 构建在 `cs-test` 上跑，安装包发布到 `cs-helper-exe`（客户端「检查更新」指向这里）。
+> 跨仓库发布需要在该仓库的 Actions secrets 里配置 `RELEASE_TOKEN`（对 `cs-helper-exe`
+> 有 `contents: write` 的 PAT）。
 
 工作流在 `.github/workflows/build-desktop.yml`：单元测试 → 前端构建 → `tauri build --no-bundle` → 上传产物。
 
