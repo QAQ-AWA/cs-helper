@@ -447,6 +447,21 @@ class Store:
         with self._lock:
             return list(self._sessions.values())
 
+    def latest_mapped_session(self, room_code: str, exclude_id: str | None = None) -> Session | None:
+        """同一房间里最近一场**有地图**的会话，用来在被放弃的对局后兜底。"""
+
+        with self._lock:
+            candidates = [
+                item
+                for item in self._sessions.values()
+                if item.room_code == room_code
+                and item.id != exclude_id
+                and item.map_name not in ("", "de_unknown")
+            ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item.updated_at)
+
     def get_session(self, session_id: str) -> Session | None:
         with self._lock:
             key = self._session_ids.get(session_id)

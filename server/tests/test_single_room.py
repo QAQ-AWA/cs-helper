@@ -216,3 +216,48 @@ def test_unmapped_session_is_abandoned_after_the_timeout(monkeypatch):
         assert session.tactics_state == "skipped"
         # 幂等：再跑一次不重复计数
         assert hub.abandon_stale_unmapped() == 0
+
+
+def test_abandoned_session_rebinds_the_room_to_the_last_real_match(monkeypatch):
+    """准备阶段取消的对局被放弃后，房间应该切回上一场真对局，而不是挂着空壳。"""
+
+    from app import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "STALE_MAP_SECONDS", 60)
+    app = create_app(secret="test-secret", demo_runner=None, room_mode="single")
+    with TestClient(app) as client:
+        token = client.post(
+            "/api/v1/room/join",
+            json={"roomCode": "MAIN", "nickname": "房主", "deviceType": "pc"},
+        ).json()["data"]["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        def report(match_id, map_name):
+            client.post(
+                "/api/v1/match/report?roomCode=MAIN",
+                json={
+                    "protocolVersion": 1,
+                    "clientVersion": "test",
+                    "platform": "5e",
+                    "matchId": match_id,
+                    "mapName": map_name,
+                    "phase": "ready",
+                    "teams": {"ct": [], "t": []},
+                },
+                headers=headers,
+            )
+
+        report("g161-real", "de_mirage")
+        hub = client.app.state.hub
+        real = hub.store.get_session_by_key("5e:g161-real")
+        real.updated_at -= 600  # 上一场，比幽灵对局旧
+
+        report("g161-phantom", "de_unknown")
+        phantom = hub.store.get_session_by_key("5e:g161-phantom")
+        phantom.created_at -= 120
+
+        assert hub.abandon_stale_unmapped() == 1
+        assert phantom.demo_state == "skipped"
+
+        snapshot = client.get("/api/v1/room/MAIN/snapshot", headers=headers).json()["data"]
+        assert snapshot["match"]["matchId"] == "g161-real"

@@ -415,7 +415,22 @@ class RoomHub:
                 session.match_id,
                 settings.STALE_MAP_SECONDS,
             )
+            self._rebind_after_abandon(session)
         return changed
+
+    def _rebind_after_abandon(self, session: Session) -> None:
+        """房间原来绑在这局上：切回同一房间最近一场有地图的对局。
+
+        否则房间里会一直挂着一局「查无此局」的空壳，用户看不到上一场的轨迹。
+        """
+
+        for room in self.store.rooms_bound_to(session.id):
+            fallback = self.store.latest_mapped_session(room.code, exclude_id=session.id)
+            if fallback is None:
+                continue
+            self.store.bind(room, fallback)
+            self.emit_session(fallback, Action.MATCH_DETECTED, self.session_view(fallback))
+            log.info("room %s rebound to %s after abandoning %s", room.code, fallback.match_id, session.match_id)
 
     def metrics(self) -> dict[str, Any]:
         stats: dict[str, Any] = dict(self.store.stats())
