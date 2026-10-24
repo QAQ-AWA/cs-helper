@@ -1,0 +1,38 @@
+[Unit]
+Description=CS Helper relay (5E match intel)
+Documentation=https://github.com/QAQ-AWA/cs-helper-exe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cshelper
+Group=cshelper
+WorkingDirectory=/opt/cs-helper
+EnvironmentFile=/etc/cs-helper.env
+# 代码目录只读，别去写 __pycache__
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+# 状态目录（会话 JSON、产物、demo 缓存）由 systemd 建好并授权给 cshelper
+StateDirectory=cs-helper
+StateDirectoryMode=0750
+ExecStart=/opt/cs-helper/.venv/bin/python -m uvicorn app.main:app \
+    --host 0.0.0.0 --port 8787 --app-dir server --proxy-headers --forwarded-allow-ips=*
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+# 单个 demo 解析峰值 1-2GB；4C24G 的 A1 实例够用，这里限个上限防止跑飞
+MemoryMax=8G
+
+# 最小权限：只放开状态目录，代码目录只读
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/cs-helper
+
+[Install]
+WantedBy=multi-user.target

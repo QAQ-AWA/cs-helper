@@ -1,0 +1,29 @@
+# 用 Caddy 给服务端套一层 HTTPS（可选，但手机端体验明显更好）
+#
+# 装 Caddy：见 https://caddyserver.com/docs/install#debian-ubuntu-raspbian
+# 把下面两处的域名换成你自己的，然后：
+#   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# 有了 HTTPS 之后，桌面端「服务端地址」和手机链接都填 https:// 的地址；
+# WebSocket 走 /ws，Caddy 会自动升级，不用额外配置。
+
+cs.example.com {
+	encode zstd gzip
+
+	# 反向代理到本机的 relay（8787 只监听内网也行）
+	reverse_proxy 127.0.0.1:8787 {
+		# demo 下载与解析都发生在服务端，这里只代理 API/WS/静态页面，
+		# 所以超时给足即可，不需要缓冲大文件
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+
+	# 访问日志（排查手机连不上时很有用）
+	log {
+		output file /var/log/caddy/cs-helper.log
+		format console
+	}
+}
