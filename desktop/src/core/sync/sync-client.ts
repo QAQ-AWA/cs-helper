@@ -1,4 +1,5 @@
 import type { MatchRecord } from '@core/match/models';
+import { clientLog } from '@core/log/client-log';
 import { buildMatchReport, CLIENT_VERSION, PROTOCOL_VERSION } from './report-builder';
 import { DEFAULT_SYNC_SETTINGS, type SyncSettings, type SyncStatus } from './types';
 
@@ -135,6 +136,13 @@ export class TeamSyncClient {
       return;
     }
 
+    // 已经连着（或在连）就别重开：之前每次调用都 disconnect + 新建，
+    // 只要有人多调几次，连接就会「已连接 → 未连接」反复闪。
+    const state = this.ws?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) {
+      return;
+    }
+
     this.disconnect();
     this.status = 'connecting';
     this.emit('statusChanged', this.status);
@@ -145,6 +153,7 @@ export class TeamSyncClient {
     try {
       this.ws = new WebSocket(wsUrl);
 
+      const socket = this.ws;
       this.ws.onopen = () => {
         this.status = 'connected';
         this.emit('statusChanged', this.status);
@@ -160,9 +169,15 @@ export class TeamSyncClient {
         }
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
+        // 旧 socket 的 close 不能影响新连接的状态，也不能触发重连风暴。
+        if (this.ws !== socket) return;
+        this.ws = null;
         this.status = 'disconnected';
         this.emit('statusChanged', this.status);
+        if (event?.code && event.code !== 1000 && event.code !== 1005) {
+          clientLog('WARN', '同步', `连接断开 code=${event.code}${event.reason ? ` ${event.reason}` : ''}`);
+        }
         if (this.settings.enabled) {
           this.scheduleReconnect();
         }
@@ -181,12 +196,14 @@ export class TeamSyncClient {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
+    // 加一点抖动：几个客户端同时断线时不会整齐地一起回来。
+    const delay = 5000 + Math.floor(Math.random() * 1500);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       if (this.settings.enabled) {
         this.connectWs();
       }
-    }, 5000);
+    }, delay);
   }
 
   public async reportMatch(record: MatchRecord): Promise<void> {

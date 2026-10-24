@@ -60,6 +60,25 @@ export function useTeamSync() {
   const aiError = ref<string | null>(null);
 
   let unsubscribe: (() => void) | null = null;
+  // 「已连接/未连接」闪一下最容易被当成故障。断线先压 1.5 秒，
+  // 期间重连成功就什么都不显示——真断了才切到未连接。
+  let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function applyStatus(next: SyncStatus) {
+    if (next === 'disconnected') {
+      if (disconnectTimer) return;
+      disconnectTimer = setTimeout(() => {
+        disconnectTimer = null;
+        status.value = 'disconnected';
+      }, 1500);
+      return;
+    }
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    }
+    status.value = next;
+  }
 
   function mergeMatch(partial: Partial<ServerMatchView>) {
     serverMatch.value = { ...(serverMatch.value ?? {}), ...partial };
@@ -68,7 +87,7 @@ export function useTeamSync() {
   onMounted(() => {
     unsubscribe = teamSyncClient.subscribe((event, data) => {
       if (event === 'statusChanged') {
-        status.value = data as SyncStatus;
+        applyStatus(data as SyncStatus);
       } else if (event === 'ROOM_MEMBERS_CHANGED') {
         const payload = data as { members: typeof roomMembers.value };
         if (payload?.members) {
@@ -142,6 +161,10 @@ export function useTeamSync() {
   });
 
   onUnmounted(() => {
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    }
     if (unsubscribe) {
       unsubscribe();
       unsubscribe = null;
