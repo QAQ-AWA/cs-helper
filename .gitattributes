@@ -1,0 +1,9 @@
+# Windows 上 core.autocrlf=true 会把 shell 脚本也转成 CRLF，
+# 传到 Linux 服务器上就变成 `$'\r': command not found`。
+# 这几类文件强制 LF。
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.service text eol=lf
+Caddyfile.example text eol=lf
