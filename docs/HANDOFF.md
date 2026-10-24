@@ -534,6 +534,85 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 阵容页不做八列表格（要横滑），改成两行卡片：第一行名字 + 信号标签 + Rating，
 第二行 ADR / RWS / K/D / 爆头 / 近 5 场。所有数字都在，不用横滑。
 
+## 原生 Android 客户端（Flutter，2026-10-24）
+
+手机端在 PWA 之外多了一份原生实现：`mobile/`，Flutter 3.47.8 / Dart 3.13.7。
+**不是 WebView 套壳**，雷达回放、WS 重连、状态合并都在 Dart 里自己实现。
+
+### 为什么做
+
+PWA 的三个老问题都出在浏览器层，服务端再改也绕不过去：
+
+| PWA | 原生 |
+| --- | --- |
+| Service Worker / 浏览器缓存 → 「只有无痕能看到新数据」 | 没有缓存层，启动即新代码 |
+| 切后台回来 WS 可能已断，页面停在「已断开」 | 自己管重连，回前台补快照 |
+| Canvas + rAF 在低端机掉帧 | `Ticker` + `CustomPainter`，只重绘雷达层 |
+
+### 结构
+
+```
+mobile/lib/
+├─ controllers/room_controller.dart   唯一状态源：连接 / 快照 / 事件 / 轨迹缓存
+├─ services/api_client.dart           REST 信封 + WS URL；settings_store.dart 存地址/房间/token
+├─ models/                            Player / Match / Analysis / Replay / PostMatch
+├─ pages/                             join / room（四页签）/ replay
+└─ widgets/                           卡片、头像、信号标签、Markdown、底部弹层
+```
+
+### 和网页端保持一致的行为（别改出分歧）
+
+- **快照是权威**：`ROOM_STATE_SYNC` 整份替换；`MATCH_DETECTED` 新对局整份替换；`AI_*` / `PROFILE_READY` 按字段合并。
+- **token 按「服务端地址 + 房间」分开存**，换房不会串号。
+- **4401 与连续两次握手失败**都清 token 回登录页；不能无限重连。
+- **我方阵营**：`analysis-side` 的 `{mySide, all}` 语义与网页端一致；「都看」必须压过 ID 库。
+- **百分比只转换一次**：`fraction()` 统一 0-1 / 0-100；`pct()` 只负责显示。
+- **A/B 视角**：`persp()` 在 `mySide` 已知时把「A队/B队」替换成「我方/对方」；未知时保留 A/B。
+- **轨迹窗口**：20 秒、坐标公式 `(gx-pos_x)/scale`、`(pos_y-gy)/scale`，与 `replay-core.js` 逐字一致。
+- 雷达图路径 `/maps/...` 是根相对路径，客户端用服务端地址补全（和桌面端 `resolveRadarUrl` 同一个坑）。
+
+### 实现上的几个坑
+
+1. **旧连接的回调会抢新连接**：`WebSocket.close()` 的 `onDone` 是异步的，重连前必须先 `++generation`，
+   回调里比对 generation，否则一次重连会变成两条连接、两个重连定时器。
+2. **雷达图 `ui.Image` 要 clone**：`ImageInfo` 在回调结束后可能被回收，直接存 `info.image`
+   会在下一次绘制时抛「Image was disposed」。现在 clone 一份并在替换/销毁时 dispose。
+3. **换对局要清 profiles**：只换 `match` 不清画像，会把上一局的人补进新阵容（网页端也有同样的隐患）。
+4. **Android 9+ 默认禁明文**：`AndroidManifest.xml` 显式 `usesCleartextTraffic="true"`，否则连不上 `http://192.168.x.x:8787`。
+5. **国内网络**：`dl.google.com` 在本机会 TLS 失败；`settings.gradle.kts` / `build.gradle.kts` 已把阿里云镜像放在 `google()` 前面。
+
+### 构建
+
+```bash
+cd mobile
+flutter pub get
+flutter analyze          # 0 issue
+flutter test             # 17 passed
+flutter build apk --release
+# build/app/outputs/flutter-apk/app-release.apk
+```
+
+本机验证用的工具链装在 `.tools/`（gitignore）：Flutter 3.47.8、Android SDK 36（platform 35/36 +
+build-tools 36.0.0/36.1.0 + NDK 28.2 + CMake 3.22.1）、JDK 17、AGP 9.1.0、Gradle 9.3.1。
+`android/local.properties` 由 Flutter / Android Studio 生成，不入库。
+
+实测产物：`app-release.apk` **50.4MB**（universal，arm64 + armeabi-v7a + x86_64），
+包名 `com.qaqawa.cshelper`，minSdk 24 / targetSdk 36，目前是 debug 签名（可自装，正式分发要换 keystore）。
+
+踩过的构建坑（都在 README 里）：
+
+- Flutter SDK 自带的 `packages/flutter_tools/gradle/settings.gradle.kts` 也要拉 AGP，需同样加阿里云镜像；
+- `shared_preferences_android` 依赖 `jni`，要 NDK 28.2 + CMake 3.22.1；`jni` 的 compileSdk 是 35，还要 platform 35；
+- Windows 上 Kotlin 增量缓存会 `Could not close incremental caches`，已在 `android/gradle.properties` 设
+  `kotlin.incremental=false`。
+
+### 未做
+
+- 历史对局列表（服务端 `/api/v1/history/sessions` 已就绪，客户端没入口）。
+- 轨迹本地持久化：只在单次会话内存缓存。
+- iOS 构建目标；协议层可直接复用。
+- 真机视觉走查：目前只有 `flutter analyze`、17 个测试（13 模型 + 4 UI）与 APK 构建/签名校验。
+
 ## 真实对局测试清单（首次验收）
 
 前置：**必须用 `7d1aded` 及之后的构建**（`a853bd9` 之前的 exe 没有服务端分析面板与同步设置）。

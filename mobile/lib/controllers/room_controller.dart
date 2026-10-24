@@ -300,6 +300,14 @@ class RoomController extends ChangeNotifier {
 
   // -- WebSocket -------------------------------------------------------
 
+  /// 回到前台时调用：socket 已经死了就立刻重连，不等指数退避。
+  void ensureConnected() {
+    if (!hasToken) return;
+    if (conn == ConnState.connected && _socket != null) return;
+    _retry = 0;
+    unawaited(connect());
+  }
+
   Future<void> connect() async {
     final currentToken = token;
     if (currentToken == null || currentToken.isEmpty) return;
@@ -532,6 +540,7 @@ class RoomController extends ChangeNotifier {
       _matchRaw = null;
       match = null;
       mySide = '';
+      profiles = <PlayerInfo>[];
       _clearDerived();
     }
     final rawProfiles = data['profiles'];

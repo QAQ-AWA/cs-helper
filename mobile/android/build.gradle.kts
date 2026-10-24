@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // 与 settings.gradle.kts 保持一致：国内优先走阿里云镜像。
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }

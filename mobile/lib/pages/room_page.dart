@@ -9,10 +9,35 @@ import 'tabs/paths_tab.dart';
 import 'tabs/post_tab.dart';
 import 'tabs/roster_tab.dart';
 
-class RoomPage extends StatelessWidget {
+class RoomPage extends StatefulWidget {
   const RoomPage({super.key, required this.controller});
 
   final RoomController controller;
+
+  @override
+  State<RoomPage> createState() => _RoomPageState();
+}
+
+class _RoomPageState extends State<RoomPage> with WidgetsBindingObserver {
+  RoomController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 切后台再回来，socket 可能已经被系统冻死；立刻重连一次，不等退避。
+    if (state == AppLifecycleState.resumed) controller.ensureConnected();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +46,7 @@ class RoomPage extends StatelessWidget {
       builder: (context, _) {
         return Scaffold(
           body: SafeArea(
-            bottom: false,
+            bottom: true,
             child: Column(
               children: <Widget>[
                 _TopBar(controller: controller),

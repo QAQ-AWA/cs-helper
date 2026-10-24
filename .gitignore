@@ -26,5 +26,8 @@ engine/.demo_index.json
 # 服务端任务产物
 .cache/
 
+# 本地打包产物（APK / exe）
+/dist/
+
 # 本地 UI 验收工具（Playwright + 浏览器内核，不入库）
 .tools/

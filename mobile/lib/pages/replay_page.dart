@@ -58,42 +58,45 @@ class _ReplayPageState extends State<ReplayPage> {
           ),
         ],
       ),
-      body: FutureBuilder<ReplayBundle>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(height: 10),
-                  Text('正在加载轨迹…', style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                ],
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+      body: SafeArea(
+        bottom: true,
+        child: FutureBuilder<ReplayBundle>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    EmptyCard('${snapshot.error}', icon: Icons.route_outlined),
-                    const SizedBox(height: 12),
-                    OutlinedButton(onPressed: _retry, child: const Text('重试')),
+                    SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(height: 10),
+                    Text('正在加载轨迹…', style: TextStyle(fontSize: 12, color: AppColors.muted)),
                   ],
                 ),
-              ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      EmptyCard('${snapshot.error}', icon: Icons.route_outlined),
+                      const SizedBox(height: 12),
+                      OutlinedButton(onPressed: _retry, child: const Text('重试')),
+                    ],
+                  ),
+                ),
+              );
+            }
+            final replay = snapshot.data!;
+            return ReplayView(
+              replay: replay,
+              radarUrl: widget.controller.resolveAsset(replay.radar),
             );
-          }
-          final replay = snapshot.data!;
-          return ReplayView(
-            replay: replay,
-            radarUrl: widget.controller.resolveAsset(replay.radar),
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -139,6 +142,7 @@ class _ReplayViewState extends State<ReplayView> with SingleTickerProviderStateM
     final stream = _stream;
     final listener = _listener;
     if (stream != null && listener != null) stream.removeListener(listener);
+    _radar?.dispose();
     super.dispose();
   }
 
@@ -161,7 +165,16 @@ class _ReplayViewState extends State<ReplayView> with SingleTickerProviderStateM
     _stream = stream;
     final listener = ImageStreamListener(
       (info, _) {
-        if (mounted) setState(() => _radar = info.image);
+        // ImageInfo 可能在回调结束后被回收，克隆一份自己持有。
+        final image = info.image.clone();
+        if (!mounted) {
+          image.dispose();
+          return;
+        }
+        setState(() {
+          _radar?.dispose();
+          _radar = image;
+        });
       },
       onError: (Object error, StackTrace? stack) {
         if (mounted) setState(() => _radarFailed = true);
