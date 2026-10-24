@@ -8,7 +8,9 @@ Thumbs.db
 # 引擎运行时产物
 engine/output/
 engine/demos_opponents/
-engine/data/maps/
+# 地图雷达图随仓库走（8 张共 1.2MB）：部署时不用再装 awpy、也不用联网下载，
+# 否则远程服务器上跑解析会报 "Map assets missing for de_dust2"。
+# 换了新地图再跑 engine/setup_maps.py 生成。
 engine/.demo_index.json
 
 # 本地配置
