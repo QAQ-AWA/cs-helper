@@ -174,3 +174,54 @@ describe('buildMatchReport', () => {
     expect(buildMatchReport(empty)).toBeNull();
   });
 });
+
+describe('marking ourselves in the roster', () => {
+  it('marks the only player carrying a 5E domain as self', () => {
+    // 5E 只在当前登录账号那条 user/info 里给 domain，其余人是空。
+    const built = buildMatchReport(
+      record([
+        [player({ steamId: '76561198000000001', nickname: 'A' })],
+        [
+          player({
+            steamId: '76561198000000002',
+            nickname: 'Me',
+            platformBoardId: '0606bexalmmc',
+          }),
+          player({ steamId: '76561198000000003', nickname: 'C' }),
+        ],
+      ]),
+    );
+
+    const t = built!.body.teams.t;
+    expect(t.map((p) => p.isSelf)).toEqual([true, false]);
+    expect(built!.body.teams.ct[0].isSelf).toBe(false);
+  });
+
+  it('marks nobody when more than one player carries a domain', () => {
+    // 分不清就别猜：猜错边会把整局分析翻到对手身上。
+    const built = buildMatchReport(
+      record([
+        [
+          player({ steamId: '76561198000000001', platformBoardId: 'aaaa1111' }),
+          player({ steamId: '76561198000000002', platformBoardId: 'bbbb2222' }),
+        ],
+        [],
+      ]),
+    );
+
+    expect(built!.body.teams.ct.every((p) => !p.isSelf)).toBe(true);
+  });
+
+  it('never marks anyone on the perfect platform', () => {
+    // 完美世界给所有人都带 zq_id，区分不出自己。
+    const built = buildMatchReport(
+      record([[player({ steamId: '76561198000000001', platformBoardId: 'zq-1' })], []], {
+        source: 'ladder-events',
+        perfectSessionPhase: 'assigned',
+      }),
+    );
+
+    expect(built!.platform).toBe('perfect');
+    expect(built!.body.teams.ct[0].isSelf).toBe(false);
+  });
+});

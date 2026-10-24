@@ -68,6 +68,9 @@ def validate_domain(domain):
     if (
         not isinstance(domain, str)
         or not _DOMAIN_RE.fullmatch(domain)
+        # 5E 的 domain 不会是 19 位纯数字；那是被当成 domain 传进来的 SteamID64。
+        # 放过去会拿 steamId 去查 5E，得到 errcode=0 但无数据，报错还看不出原因。
+        or _STEAMID64_RE.fullmatch(domain)
         or domain.upper() in _WINDOWS_RESERVED_NAMES
     ):
         raise ValueError("invalid 5E player domain")

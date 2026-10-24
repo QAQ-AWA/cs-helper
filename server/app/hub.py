@@ -222,6 +222,12 @@ class RoomHub:
         session.report["mySide"] = my_side
         session.report["analyzeAll"] = bool(analyze_all and my_side is None)
         session.updated_at = time.time()
+        if my_side in ("ct", "t"):
+            # 手动选过一次边就该记住：下一局不用再点，也不会再把自己算成对手。
+            try:
+                self.learn_identity(room, my_side)
+            except RoomNotFound:
+                pass
         self.persist(session)
         self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         if self.jobs.demo_enabled:

@@ -59,13 +59,15 @@ def resolve_side(
     if report.get("analyzeAll") is True:
         # "Analyze both" must beat the library, otherwise the choice is a no-op.
         return None, "explicit-all"
-    if library_side in ("ct", "t"):
-        return library_side, "library"
 
     teams = report.get("teams") or {}
     for side in ("ct", "t"):
         if any(player.get("isSelf") for player in teams.get(side) or []):
+            # 「我在这边」是客户端直接看到的，比身份库的历史推断更可靠：
+            # 以前同队的人这局可能就在对面。
             return side, "self"
+    if library_side in ("ct", "t"):
+        return library_side, "library"
 
     # A party tag is only evidence when it is unambiguous: at least two players
     # share it and none of them sit on the other side. Lobbies that hand every
@@ -128,6 +130,11 @@ def to_engine_hints(
         nickname = (player.get("nickname") or "").strip()
         domain = (player.get("platformUserId") or "").strip()
         steam_id = (player.get("steamId") or "").strip()
+        if _STEAM_RE.match(domain):
+            # 客户端在没有 5E domain 时会拿 steamId 顶上 platformUserId。
+            # 19 位纯数字也过 _DOMAIN_RE，直接当 domain 下发会让引擎拿 steamId
+            # 去查 5E（Arena API error: None），整批玩家全部失败。
+            domain = ""
         if not nickname or not _DOMAIN_RE.match(domain) or not _STEAM_RE.match(steam_id):
             return None
         hints.append({"username": nickname, "domain": domain, "steamid": steam_id})

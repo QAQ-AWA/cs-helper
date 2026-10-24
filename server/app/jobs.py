@@ -521,6 +521,9 @@ class JobManager:
         # Opening habits can only be read once the paths exist, so the tactics
         # pass chains here rather than running next to the profile analysis.
         session.trajectory = build_profile(session.map_name, outcome.players)
+        # 轨迹重建了，开局预判就得重算：切换阵营或补下载之后，旧结论已经过期。
+        if session.tactics_state != "running":
+            session.tactics_state = "pending"
         self.submit_tactics(session)
 
     # -- tactics (second AI pass) --------------------------------------

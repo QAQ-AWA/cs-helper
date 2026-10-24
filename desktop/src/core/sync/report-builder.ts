@@ -158,6 +158,7 @@ function playerPayload(player: MatchPlayer): ReportPlayerPayload | null {
     platformUserId,
     nickname: nickname || 'Unknown',
     avatarUrl: player.avatar,
+    // 由 markSelf 统一标记：单看一个人分不出谁是自己。
     isSelf: false,
     partyTag,
     stats: buildStats(player),
@@ -180,6 +181,31 @@ export function shouldReport(record: MatchRecord): boolean {
   return true;
 }
 
+/**
+ * 5E 的 `domain` 只出现在「当前登录账号」那一条 `/api/user/info` 响应里，
+ * 其余九人的 `platformBoardId` 是空的（回退成 steamId）。
+ *
+ * 这个差异是客户端唯一可靠的「我是谁」信号。丢掉它，服务端就只能把十个人
+ * 全当对手，结果是先把自己（或自己队的）demo 拉下来分析——实测踩过。
+ */
+const DOMAIN_LIKE = /^[a-z0-9_-]{1,64}$/i;
+
+function markSelf(
+  platform: '5e' | 'perfect',
+  ct: ReportPlayerPayload[],
+  t: ReportPlayerPayload[],
+): void {
+  // 完美世界给所有人都带 zq_id，区分不出自己，别乱标。
+  if (platform !== '5e') return;
+  const candidates = [...ct, ...t].filter(
+    (player) =>
+      player.platformUserId !== player.steamId && DOMAIN_LIKE.test(player.platformUserId),
+  );
+  // 只有唯一候选才算数：出现多人带 domain 时宁可让服务端去问，也不要猜错边。
+  if (candidates.length !== 1) return;
+  candidates[0].isSelf = true;
+}
+
 export function buildMatchReport(record: MatchRecord, now = Date.now()): BuiltMatchReport | null {
   if (!shouldReport(record)) return null;
 
@@ -197,6 +223,8 @@ export function buildMatchReport(record: MatchRecord, now = Date.now()): BuiltMa
     .filter((player): player is ReportPlayerPayload => player !== null);
 
   if (ct.length === 0 && t.length === 0) return null;
+
+  markSelf(platform, ct, t);
 
   const countdownSeconds = resolveCountdownSeconds(record, now);
   const body: MatchReportBody = {

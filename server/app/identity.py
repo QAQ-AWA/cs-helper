@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from threading import RLock
 from typing import Any, Iterable
@@ -39,6 +40,15 @@ def _clean(values: Iterable[Any]) -> list[str]:
         if text and text not in seen:
             seen.append(text)
     return seen
+
+
+_STEAM_LIKE = re.compile(r"765\d{14}\Z")
+
+
+def _clean_domains(values: Iterable[Any]) -> list[str]:
+    """5E domains only — a SteamID here is the client's fallback, not a domain."""
+
+    return [value for value in _clean(values) if not _STEAM_LIKE.fullmatch(value)]
 
 
 class IdentityStore:
@@ -77,7 +87,7 @@ class IdentityStore:
             room = self._read()["rooms"].get(room_code.upper()) or {}
         return {
             "steamIds": _clean(room.get("steamIds") or []),
-            "domains": _clean(room.get("domains") or []),
+            "domains": _clean_domains(room.get("domains") or []),
         }
 
     def summary(self, room_code: str) -> dict[str, Any]:
@@ -121,7 +131,7 @@ class IdentityStore:
                 room_code.upper(), {"steamIds": [], "domains": []}
             )
             steam_ids = _clean([*room.get("steamIds", []), *[p.get("steamId") for p in players]])
-            domains = _clean(
+            domains = _clean_domains(
                 [*room.get("domains", []), *[p.get("platformUserId") for p in players]]
             )
             before = (len(room.get("steamIds") or []), len(room.get("domains") or []))

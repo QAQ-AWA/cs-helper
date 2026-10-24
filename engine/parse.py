@@ -10,11 +10,28 @@ import config
 
 log = logging.getLogger("parse")
 
-# ``bomb_planted.site`` is the bombsite entity index. Verified on de_mirage
-# against the radar transform: 326 lands on A (bottom-right), 327 on B
-# (top-left). Entity indices are per-map, so this is the one assumption to
-# re-check if a map ever reports sites backwards.
+# ``bomb_planted.site`` 是炸弹点的实体索引，**每个地图都不一样**：
+# de_mirage 是 326/327，de_dust2 是 313/314。之前只写死了 mirage 那一对，
+# 于是除 mirage 之外的地图 site 全被算成 None，开局预判永远「没有下包数据」。
+# 实测两张图都是「索引小的在雷达右侧＝A」，所以已知的查表、未知的按升序编号。
 BOMBSITE_LABELS = {326: "A", 327: "B"}
+
+
+def _site_labels(indices):
+    """Map this demo's bombsite entity indices to A/B.
+
+    Entity indices differ per map and per map version, so a hardcoded table can
+    only ever cover the maps we happened to test. Two distinct indices are
+    enough: CS2 registers the sites in map order, A first.
+    """
+    seen = sorted({int(value) for value in indices if value is not None})
+    known = {value: BOMBSITE_LABELS[value] for value in seen if value in BOMBSITE_LABELS}
+    if known and len(known) == len(seen):
+        return known
+    if len(seen) == 2:
+        log.debug("assuming bombsite order %s -> A/B", seen)
+        return {seen[0]: "A", seen[1]: "B"}
+    return known
 
 _PLANT_CACHE: "OrderedDict[tuple[str, float], dict]" = OrderedDict()
 _PLANT_CACHE_MAX = 8
@@ -329,6 +346,7 @@ def _parse_plants_uncached(parser, rounds):
                     float(row["Y"]),
                 )
 
+    labels = _site_labels(df["site"]) if "site" in df.columns else {}
     plants = {}
     for _, plant in df.iterrows():
         tick = int(plant["tick"])
@@ -336,7 +354,7 @@ def _parse_plants_uncached(parser, rounds):
         if official_num is None:
             continue
         raw_site = plant.get("site")
-        site = BOMBSITE_LABELS.get(int(raw_site)) if pd.notna(raw_site) else None
+        site = labels.get(int(raw_site)) if pd.notna(raw_site) else None
         position = positions.get((tick, str(plant.get("user_steamid"))))
         freeze = next(r["fe_tick"] for r in rounds if r["official_num"] == official_num)
         plants[official_num] = {

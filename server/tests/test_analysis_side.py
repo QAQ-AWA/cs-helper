@@ -226,3 +226,55 @@ def test_side_endpoint_needs_a_match(demo_client):
     )
     assert response.status_code == 409
     assert response.json()["code"] == 1009
+
+
+def test_self_marker_decides_the_side():
+    """客户端标出的 isSelf 比任何推断都直接：只有对面五个需要下载。"""
+    report = _report()
+    report["teams"]["ct"][2]["isSelf"] = True
+
+    assert resolve_my_side(report) == "ct"
+    assert {p["team"] for p in demo_targets(report)} == {"t"}
+    assert len(demo_targets(report)) == 5
+
+
+def test_self_marker_beats_a_stale_library():
+    """以前同队的人这局可能在对面，身份库不该盖过「我在这边」。"""
+    report = _report()
+    report["teams"]["ct"][0]["isSelf"] = True
+
+    assert resolve_my_side(report, library_side="t") == "ct"
+    assert {p["team"] for p in demo_targets(report, "t")} == {"t"}
+
+
+def test_no_marker_at_all_still_falls_back_to_all_ten():
+    """没有 isSelf、也没有身份库时，只能全都分析——这是安全失败，不是错。"""
+    report = _report()
+
+    assert resolve_my_side(report) is None
+    assert len(demo_targets(report)) == 10
+
+
+def test_steam_id_never_passes_as_a_5e_domain():
+    """没有 domain 时客户端拿 steamId 顶上，19 位数字也能过正则。
+
+    真机事故：5 个对手的 hint 全带 steamId 当 domain，引擎拿它查 5E
+    → Arena API error: None，五个人一起失败，一局白跑。
+    """
+    from app.adapters import to_engine_hints
+
+    report = _report()
+    for side in ("ct", "t"):
+        for player in report["teams"][side]:
+            player["platformUserId"] = player["steamId"]
+
+    assert to_engine_hints(report, "ct") is None
+
+
+def test_real_domains_still_become_hints():
+    from app.adapters import to_engine_hints
+
+    hints = to_engine_hints(_report(), "ct")
+    assert hints is not None
+    assert len(hints) == 5
+    assert {h["domain"] for h in hints} == {f"t{n}" for n in range(1, 6)}
