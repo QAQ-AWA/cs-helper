@@ -490,6 +490,29 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/browsers" npx playwright test
 `crossOrigin=anonymous` 取，失败再退回普通加载：前者让 canvas 不被标记 tainted
 （能读像素），后者保证反向代理吞掉 CORS 头时雷达图至少还能显示。
 
+## 5E 是分段落数据的（2026-10-24）
+
+真机看到的顺序：
+
+| 阶段 | 到达内容 | 之前的问题 |
+| --- | --- | --- |
+| 1 | matchId | 立刻跑全套作业 |
+| 2 | 十个人 ID（可能分两次） | 名单只到一半就开始写分析 |
+| 3 | 地图（晚几秒到几十秒） | demo 在 de_unknown 上白跑一次 |
+| 4 | 持续回报（准备、阵营、赛季） | 真数据到了，`ai_state=ready` 挡住重算 |
+
+现在的准入规则（`server/app/readiness.py`）：
+
+- **地图未知就等**：`de_unknown` / `unknown` / `workshop` 时 demo 与 AI 都进 `waiting`，
+  前端显示「等地图确认，到位后自动生成」
+- **输入变了才重算**：每次上报算指纹 `地图 + 名单 steamIds + 敌我`，变了就作废
+  `aiResult` 重算；头像、准备状态这类变化不触发
+- **名单补齐算输入变了**：这条最容易漏——第一份分析建立在 4 个人上，补齐后必须重算
+- **手动「重新分析」用 `force=True`** 绕过地图等待，按钮点了就得有反应
+
+坑：`profile_state` 已经是 `ready` 时，`submit_profile` 会直接返回，链式的
+`profile → home → ai` 不会走，所以 `report_match` 必须显式补一次 `submit_ai`。
+
 ## 真实对局测试清单（首次验收）
 
 前置：**必须用 `7d1aded` 及之后的构建**（`a853bd9` 之前的 exe 没有服务端分析面板与同步设置）。
