@@ -11,7 +11,7 @@ CS2 的「端 · 云 · 多端」一体化项目：**桌面探针采集 → 云�
 | [`desktop/`](desktop/) | 桌面客户端：本机侦测、本地展示、对局上报、习惯轨迹 | Tauri v2 · Rust · Vue 3 · TS | ✅ 可用（286 tests） |
 | [`server/`](server/) | 房间与分发服务：上报幂等、画像广播、解析编排、轨迹按需下发、历史落盘与房间回收、开局预判 | FastAPI · WebSocket | ✅ 可用（123 tests） |
 | [`server/static/`](server/static/) | 手机端 PWA：房间、阵容、选手详情、轨迹回放 | 原生 ESM · Canvas | ✅ P3 |
-| [`mobile/`](mobile/) | **原生 Android 客户端**：同一套房间 / 分析 / 轨迹 / 赛后，Flutter 实现 | Flutter · Dart | ✅ 可用（17 tests） |
+| [`mobile/`](https://github.com/QAQ-AWA/cs-helper-android) | **原生 Android 客户端**（独立仓库）：同一套房间 / 分析 / 轨迹 / 赛后，Flutter 实现 | Flutter · Dart | ✅ 可用（22 tests） |
 | [`engine/`](engine/) | Demo 检索、下载、解析引擎 | Python · demoparser2 | ✅ 可用（111 tests） |
 | [`contract/`](contract/) | 端云事件契约 | JSON Schema | ✅ v1 |
 | [`tools/`](tools/) | 端到端冒烟脚本 | Python | ✅ |
@@ -70,17 +70,20 @@ npm run build:exe    # 出单文件 exe（src-tauri/target/release/）
 
 ### Android 客户端（Flutter）
 
+客户端独立维护在 <https://github.com/QAQ-AWA/cs-helper-android>：
+
 ```bash
-cd mobile
+git clone https://github.com/QAQ-AWA/cs-helper-android
+cd cs-helper-android
 flutter pub get
 flutter run                  # 真机 / 模拟器
 flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
 ```
 
 要求 Flutter 3.24+、JDK 17+、Android SDK 36。手机与电脑在同一 Wi-Fi，地址填
-`http://<电脑局域网IP>:8787`（不要填 `127.0.0.1`）。详见 [mobile/README.md](mobile/README.md)。
+`http://<电脑局域网IP>:8787`（不要填 `127.0.0.1`）。详见仓库内的 README。
 
-独立仓库（CI 自动出 APK）：<https://github.com/QAQ-AWA/cs-helper-android>
+预构建 APK 在 [Releases](https://github.com/QAQ-AWA/cs-helper-android/releases)（CI 自动出包）。
 
 ### 构建与下载（无需本地 Rust）
 
@@ -118,7 +121,7 @@ cd engine && python -m pytest tests -q
 | 服务端 | `cd server && pytest tests -q` | 123 passed |
 | 引擎 | `cd engine && pytest tests -q` | 111 passed, 10 skipped（缺 328MB 集成样本） |
 | 桌面端 | `cd desktop && npm test` | 286 passed |
-| Android | `cd mobile && flutter analyze && flutter test` | 0 issue · 17 passed |
+| Android | `cd cs-helper-android && flutter analyze && flutter test` | 0 issue · 22 passed |
 | 端到端 | `python tools/smoke_e2e.py`（先启动 8787） | 建房 → 加入 → 上报 → 收到画像 |
 
 ## 事件契约

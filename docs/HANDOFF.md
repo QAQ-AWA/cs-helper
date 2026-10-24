@@ -633,14 +633,27 @@ build-tools 36.0.0/36.1.0 + NDK 28.2 + CMake 3.22.1）、JDK 17、AGP 9.1.0、Gr
 
 ### 独立仓库与 CI
 
-`mobile/` 已同步到独立仓库 **<https://github.com/QAQ-AWA/cs-helper-android>**（首个提交 `e40bac2`）。
-两边代码同源，但独立仓库带自己的 `.github/workflows/build.yml`：
+`mobile/` 现在**只在独立仓库** <https://github.com/QAQ-AWA/cs-helper-android> 维护
+（主仓库 `.gitignore` 已忽略 `/mobile/`，本地目录只是工作副本）。独立仓库带自己的 `.github/workflows/build.yml`：
 
 - push `main` → 构建 universal + arm64 + armeabi-v7a，更新 `latest-build` 预发布；
 - 打 `v*` tag → 生成正式 Release（APK 直接可下）；
 - 工作流会先装 platform 35/36、build-tools 36、NDK 28.2、CMake 3.22.1，再跑 analyze/test/build。
 
-改客户端时两边都要同步；如果只改主仓库，记得把 `mobile/` 推到独立仓库（或在独立仓库直接改）。
+### 对手开局走位解读（v0.2.0）
+
+服务端上线 `pathReport`（结构化的对手开局走位结论），客户端只负责展示：
+
+- **入口**：快照 / `MATCH_DETECTED` 的 `match.pathReport`，以及新事件 `PATHS_REPORT_READY {report}`。
+- **模型**：`PathReport` / `PathReportPlayer`，所有字段可选；`isEmpty` 时整张卡不渲染。
+- **位置**：轨迹页 `_statusCard()` **上方**，先看结论再点选手。
+- **卡片**：chip 行（tempo / sitePreference）→ summary（15sp w600）→ 每人一块（习惯 / 大概率 / 针对）
+  → 整队对策；长文本换行不截断，缺省行直接不渲染。
+- **不要**做成可折叠、不要重复分析页的「开局预判」Markdown。
+
+真实服务端验收（`http://129.146.178.13:8787`，房间 `V9LSAH`）：`pathReport` 有
+summary / tempo / sitePreference + 2 名选手 + 3 条对策，字段与约定一致，昵称能和轨迹列表对上。
+`flutter analyze` 0 issue，22 tests passed（新增 3 个模型用例 + 2 个轨迹页渲染用例）。
 
 ### 未做
 
