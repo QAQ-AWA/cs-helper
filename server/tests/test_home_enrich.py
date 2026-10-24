@@ -207,3 +207,32 @@ def test_home_can_be_switched_off():
         )
         data = _wait(client, room, lambda snap: (snap["match"] or {}).get("homeState") == "skipped")
     assert data["match"]["homeCoverage"] == 0
+
+
+def test_season_average_replaces_the_duplicated_client_rating():
+    """客户端拿不到场均时会用本图生涯 Rating 顶上，结果和 seasonRating 一模一样。"""
+
+    from app.home_enrich import merge_season_stats
+
+    profiles = [
+        {"platformUserId": "p1", "stats": {"rating": 0.97, "seasonRating": 0.97}},
+    ]
+    seasons = {"p1": {"rating": 0.97, "avgRating": 1.065}}
+    merge_season_stats(profiles, seasons)
+
+    stats = profiles[0]["stats"]
+    assert stats["seasonRating"] == 0.97
+    assert stats["rating"] == 1.065
+
+
+def test_a_genuinely_different_client_rating_is_kept():
+    from app.home_enrich import merge_season_stats
+
+    profiles = [
+        {"platformUserId": "p1", "stats": {"rating": 1.20, "seasonRating": 0.97}},
+    ]
+    seasons = {"p1": {"rating": 0.97, "avgRating": 1.065}}
+    merge_season_stats(profiles, seasons)
+
+    # 客户端报的是独立来源（近几场），不该被赛季场均盖掉。
+    assert profiles[0]["stats"]["rating"] == 1.20

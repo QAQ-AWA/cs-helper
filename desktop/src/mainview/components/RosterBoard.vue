@@ -56,11 +56,14 @@ function recentResults(value: unknown): MatchPlayer['recentResults'] | undefined
 /** 服务端的赛季数据优先，客户端抓到的值兜底。 */
 function withServerStats(player: MatchPlayer): MatchPlayer {
   const stats = serverStats(player);
+  const seasonRating = num(stats.seasonRating) ?? player.seasonRating;
+  const recent = num(stats.rating) ?? player.rating;
   return {
     ...player,
     score: num(stats.elo) ?? player.score,
-    rating: num(stats.rating) ?? player.rating,
-    seasonRating: num(stats.seasonRating) ?? player.seasonRating,
+    // 两列同名同值只会让人以为出 bug：拿不到真正的赛季场均时留空。
+    rating: recent !== undefined && recent === seasonRating ? undefined : recent,
+    seasonRating,
     adpr: num(stats.seasonAdr) ?? player.adpr,
     weRaw: num(stats.seasonRws) ?? player.weRaw,
     kd: num(stats.kd) ?? player.kd,

@@ -144,7 +144,14 @@ def merge_season_stats(profiles: list[dict[str, Any]], seasons: dict[str, dict[s
 
         if not stats.get("matchesPlayed") and season.get("matches"):
             stats["matchesPlayed"] = int(season["matches"])
-        if stats.get("rating") in (None, 0, 1) and season.get("avgRating"):
+        # 「近期 Rating」= 赛季场均（season_data.avg_rating）。
+        # 客户端在拿不到场均时会用本图生涯 Rating 顶上，结果和 seasonRating 一模一样；
+        # 服务端拿到真正的场均时要把这个假值换掉，否则两列永远重复。
+        duplicate = (
+            stats.get("rating") == stats.get("seasonRating")
+            and season.get("avgRating") not in (None, season.get("rating"))
+        )
+        if (stats.get("rating") in (None, 0, 1) or duplicate) and season.get("avgRating"):
             # 1 is the desktop's "unknown" placeholder, not a real rating.
             stats["rating"] = season["avgRating"]
         if not stats.get("kd") and season.get("kd"):

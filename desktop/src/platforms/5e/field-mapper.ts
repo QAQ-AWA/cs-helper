@@ -269,10 +269,12 @@ export function buildP5ePlayer(
 
   const seasonRating = seasonBlock?.rating ?? mapRating;
 
+  // 「近期 Rating」只认赛季场均。之前这里回退到 mapRating（本图生涯 Rating），
+  // 而 seasonRating 在缺少 season_data 时也回退到同一个 mapRating，
+  // 于是两列显示完全一样的数字。宁可留空，也不要拿同一个值冒充两个指标。
   const rating =
     seasonBlock?.avgRating
     ?? level9Rating
-    ?? mapRating
     ?? (csgoRating && csgoRating > 0 ? csgoRating : undefined);
 
   const adpr = seasonBlock?.adr ?? mapStats?.adr;

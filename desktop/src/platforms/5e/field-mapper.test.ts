@@ -126,7 +126,9 @@ describe('P5e field mapper', () => {
     expect(player.steamId).toBe('76561198738114681');
     expect(player.score).toBe(776.18);
     expect(player.seasonRating).toBe(0.74);
-    expect(player.rating).toBe(0.74);
+    // 这里没有 season_data.avg_rating，rating 只认 level9 / csgo_rating，
+    // 不再回退到本图生涯 Rating —— 那样两列会显示同一个数。
+    expect(player.rating).toBe(0.58);
     expect(player.mapWinRate).toBe(0.28);
     expect(player.mapWinNum).toBe(5);
     expect(player.mapTotalNum).toBe(18);
