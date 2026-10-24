@@ -13,6 +13,8 @@ from .artifacts import ArtifactStore
 from .engine_runner import DemoRunner
 from .events import Action
 from .identity import IdentityStore
+from .adapters import resolve_side
+from .readiness import analysis_key
 from .jobs import JobManager
 from .persistence import SessionRepository
 from .security import TokenService
@@ -207,15 +209,30 @@ class RoomHub:
         previous_map = existing.map_name if existing is not None else None
         session, created = self.store.upsert_session(report, room_code=room.code)
         self.store.bind(room, session)
+        # 5E 是分段落数据：先 matchId，再名单，再地图，之后还在持续回报。
+        # 每来一次都判断「分析用的输入变没变」，变了就把旧结论作废，
+        # 让后面的 submit_ai 按新数据重算，而不是守着第一份半成品不放。
+        side, _source = resolve_side(session.report, self.identity.match(room.code, session.report))
+        key = analysis_key(session.map_name, session.report, side)
+        if session.analysis_key != key:
+            session.analysis_key = key
+            if session.ai_state in {"ready", "waiting", "failed"}:
+                session.ai_state = "pending"
+                session.ai_result = None
+                session.ai_text = None
         # 地图常常是「先 de_unknown、后补上」：第一次上报时 demo 会被跳过，
         # 等真地图到了必须重跑，否则轨迹永远不出来。
         if not created and session.map_name != previous_map:
             session.demo_state = "pending"
             session.tactics_state = "pending"
+            session.tactics_text = None
         self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
         self.persist(session)
         self.jobs.submit_profile(session)
         self.jobs.submit_demo(session)
+        # profile 已经是 ready 时链式调用不会再触发分析，这里必须显式补一次：
+        # 地图/名单变化后 ai_state 被置回 pending，得有东西把它推起来。
+        self.jobs.submit_ai(session)
         return session, created
 
     def set_analysis_side(
@@ -269,7 +286,8 @@ class RoomHub:
         session.updated_at = time.time()
         self.persist(session)
         self.emit_session(session, Action.MATCH_DETECTED, self.session_view(session))
-        self.jobs.submit_ai(session)
+        # 用户明确点了「重新分析」：敌我没定也照算，别让按钮点了没反应。
+        self.jobs.submit_ai(session, force=True)
         return session
 
     def report_post_match(self, room: Room, report: dict[str, Any]) -> Session:

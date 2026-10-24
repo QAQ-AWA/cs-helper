@@ -302,7 +302,8 @@ def test_demo_reruns_when_the_map_becomes_known(demo_client, monkeypatch):
 
     room = _room(client)
     _report(client, room, mapName="de_unknown")
-    _wait(client, room, lambda match: match.get("demoState") == "skipped")
+    # 地图未确认是「等」而不是「不支持」，状态要能区分开。
+    _wait(client, room, lambda match: match.get("demoState") == "waiting")
     assert runner.calls == []
 
     _report(client, room, mapName="de_mirage")

@@ -22,6 +22,8 @@ export interface ServerMatchView {
   aiText?: string | null;
   /** 结构化分析结果（v3）；老会话只有 aiText。 */
   aiResult?: AiAnalysisResultV3 | null;
+  /** 还差什么才能开算（例如「等地图确认」）。 */
+  aiWait?: string[] | null;
   tacticsState?: string;
   tacticsText?: string | null;
   postReport?: P5ePostMatchReport | null;

@@ -66,12 +66,15 @@ const aiStatus = computed<'pending' | 'running' | 'ready' | 'failed' | 'skipped'
   if (aiResult.value) return 'ready';
   const state = props.sync?.serverMatch.value?.aiState;
   if (state === 'running') return 'running';
+  // 服务端在等地图/名单时是 waiting，对界面来说就是「还没开始」。
+  if (state === 'waiting') return 'pending';
   if (state === 'failed') return 'failed';
   if (state === 'skipped') return 'skipped';
   return 'pending';
 });
 
 const aiError = computed(() => props.sync?.aiError.value ?? null);
+const aiWait = computed(() => props.sync?.serverMatch.value?.aiWait ?? null);
 
 /** 服务端认不出我方是谁时，先问一次，别替用户猜。 */
 const sideDismissed = ref(false);
@@ -173,7 +176,8 @@ const postReport = computed(
         :result="aiResult"
         :status="aiStatus"
         :error="aiError"
-        self-side="A"
+        :waiting="aiWait"
+        :self-side="mySide ? 'A' : null"
         @analyze="sync?.rerunAnalysis()"
       />
       <ServerAnalysisPanel v-else-if="activeTab === 'analysis' && aiText" :sync="sync!" />

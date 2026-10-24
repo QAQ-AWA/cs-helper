@@ -40,6 +40,8 @@ const props = defineProps<{
   result: AiAnalysisResultV3 | null;
   status: 'pending' | 'running' | 'ready' | 'failed' | 'skipped';
   error?: string | null;
+  /** 服务端还在等什么（等地图确认 / 名单 x/10）。 */
+  waiting?: string[] | null;
   highlightedSide?: 'A' | 'B' | null;
   focusedSteamId?: string | null;
   selfSide?: AiSide | null;
@@ -57,6 +59,11 @@ const probabilityResult = computed(() => result.value);
 const isLoading = computed(() => props.status === 'running');
 const isError = computed(() => props.status === 'failed');
 const aiAvailable = computed(() => props.status !== 'skipped');
+const waitText = computed(() =>
+  props.waiting?.length
+    ? `${props.waiting.join(' · ')}，到位后自动生成`
+    : l('对局数据到位后服务端会自动生成，也可以手动重跑。', 'The relay generates it once the roster is in; you can also rerun it manually.'),
+);
 
 function sideLabel(side: AiSide): string {
   return sideRelationshipLabel(side, props.selfSide, currentLocale());
@@ -260,7 +267,7 @@ watch(() => props.focusedSteamId, focusSignal, { immediate: true });
           {{ isError ? l('本次分析未完成', 'Analysis did not complete') : l('等待服务端分析', 'Waiting for the relay') }}
         </h2>
         <p class="mt-2 text-pretty text-[13px] leading-relaxed text-slate-500">
-          {{ isError && props.error ? props.error : l('对局数据到位后服务端会自动生成，也可以手动重跑。', 'The relay generates it once the roster is in; you can also rerun it manually.') }}
+          {{ isError && props.error ? props.error : waitText }}
         </p>
         <button
           type="button"

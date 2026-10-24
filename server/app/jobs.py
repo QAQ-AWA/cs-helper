@@ -30,6 +30,7 @@ from .ai import (
     structured_allowed_players,
 )
 from .analysis_result import parse_analysis_result, render_markdown
+from .readiness import analysis_key, map_ready, missing_for_analysis, missing_for_demo
 from .evidence import build_evidence
 from .artifacts import ArtifactStore
 from .engine_runner import DemoRequest, DemoRunner
@@ -118,6 +119,23 @@ class JobManager:
 
     def submit_demo(self, session: Session) -> Future | None:
         if self._demo_runner is None:
+            return None
+        # 地图没确认时引擎没有对应资源，跑也是白跑一次失败；等它到。
+        if not map_ready(session.map_name):
+            if session.demo_state not in {"running", "ready"}:
+                session.demo_state = "waiting"
+            self._emit_session(
+                session,
+                Action.JOB_PROGRESS,
+                {
+                    "jobId": f"demo-{session.id[:8]}",
+                    "stage": "demo",
+                    "done": 0,
+                    "total": 0,
+                    "etaSec": None,
+                    "waiting": missing_for_demo(session.map_name),
+                },
+            )
             return None
         with self._lock:
             if session.demo_state in {"running", "ready"}:
@@ -265,15 +283,36 @@ class JobManager:
         self.submit_ai(session)
 
     # -- ai ------------------------------------------------------------
-    def submit_ai(self, session: Session) -> Future | None:
+    def submit_ai(self, session: Session, *, force: bool = False) -> Future | None:
         if self._ai_client is None:
             if session.ai_state == "pending":
                 session.ai_state = "skipped"
+            return None
+        # 地图/名单/敌我还没齐就先别算：一份建立在空数据上的结论，
+        # 比晚几秒出来的结论更糟，而且用户会当真。
+        missing = missing_for_analysis(session.map_name, session.report, self._side(session))
+        if missing and not force:
+            session.ai_wait = missing
+            if session.ai_state != "running":
+                session.ai_state = "waiting"
+            self._emit_session(
+                session,
+                Action.JOB_PROGRESS,
+                {
+                    "jobId": f"ai-{session.id[:8]}",
+                    "stage": "ai",
+                    "done": 0,
+                    "total": 1,
+                    "etaSec": None,
+                    "waiting": missing,
+                },
+            )
             return None
         with self._lock:
             if session.ai_state in {"running", "ready"}:
                 return None
             session.ai_state = "running"
+            session.ai_wait = None
         return self.submit("ai", session, self._ai_work)
 
     def _stream_ai(self, session: Session, prompt: str, system: str | None) -> str:

@@ -97,6 +97,10 @@ class Session:
     ai_text: str | None = None
     # 结构化分析结果（v3）：客户端按卡片渲染，ai_text 是给手机看的纯文本版。
     ai_result: dict[str, Any] | None = None
+    # 这份分析是基于什么输入算出来的（地图 + 名单 + 敌我）。变了就得重算。
+    analysis_key: str | None = None
+    # 还差什么才能开跑，给界面显示「等地图确认」这种话。
+    ai_wait: list[str] | None = None
     # Second AI pass: opening habits read off the parsed trajectories.
     tactics_state: str = "pending"  # pending | running | ready | skipped | failed
     tactics_text: str | None = None
@@ -126,6 +130,7 @@ class Session:
             "aiState": self.ai_state,
             "aiText": self.ai_text,
             "aiResult": self.ai_result,
+            "aiWait": self.ai_wait,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
             "postReport": self.post_report,
@@ -155,6 +160,8 @@ class Session:
             "aiState": self.ai_state,
             "aiText": self.ai_text,
             "aiResult": self.ai_result,
+            "analysisKey": self.analysis_key,
+            "aiWait": self.ai_wait,
             "tacticsState": self.tactics_state,
             "tacticsText": self.tactics_text,
             "trajectory": self.trajectory,
@@ -185,6 +192,8 @@ class Session:
                 ai_state=str(data.get("aiState") or "pending"),
                 ai_text=data.get("aiText"),
                 ai_result=data.get("aiResult"),
+                analysis_key=data.get("analysisKey"),
+                ai_wait=data.get("aiWait"),
                 tactics_state=str(data.get("tacticsState") or "pending"),
                 tactics_text=data.get("tacticsText"),
                 trajectory=data.get("trajectory"),
